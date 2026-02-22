@@ -44,7 +44,7 @@ export default function NewPaperPage() {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  // PDF選択時にメタデータ抽出
+  // PDF選択時にAIでメタデータ抽出
   const handlePdfSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -58,11 +58,21 @@ export default function NewPaperPage() {
       const res = await fetch("/api/pdf/parse", { method: "POST", body: formData });
       if (res.ok) {
         const data = await res.json();
+        // AI抽出メタデータをフォームに自動入力（空の場合のみ）
         if (data.title && !form.title_original) {
           updateField("title_original", data.title);
         }
-        if (data.author && !form.authors) {
-          updateField("authors", data.author);
+        if (data.authors?.length && !form.authors) {
+          updateField("authors", Array.isArray(data.authors) ? data.authors.join(", ") : data.authors);
+        }
+        if (data.journal && !form.journal) {
+          updateField("journal", data.journal);
+        }
+        if (data.published_date && !form.published_date) {
+          updateField("published_date", data.published_date);
+        }
+        if (data.doi && !form.doi) {
+          updateField("doi", data.doi);
         }
         if (data.text) {
           setPdfText(data.text);
@@ -241,7 +251,12 @@ export default function NewPaperPage() {
             className="block w-full text-sm text-gray-500 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100 dark:text-gray-400 dark:file:bg-blue-900/30 dark:file:text-blue-400"
           />
           {isParsing && (
-            <p className="mt-2 text-xs text-gray-500">PDFからメタデータを抽出中...</p>
+            <div className="mt-2 flex items-center gap-2">
+              <div className="h-3 w-3 animate-spin rounded-full border-2 border-blue-300 border-t-blue-600" />
+              <p className="text-xs text-blue-600 dark:text-blue-400">
+                AIがPDFからメタデータを抽出しています...（タイトル・著者・DOI等）
+              </p>
+            </div>
           )}
           {pdfFile && !isParsing && (
             <p className="mt-2 text-xs text-green-600 dark:text-green-400">

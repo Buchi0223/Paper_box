@@ -165,6 +165,62 @@ export async function translateTitle(
   };
 }
 
+// PDFテキストからメタデータを構造化抽出
+export async function extractMetadata(text: string): Promise<{
+  title: string;
+  authors: string[];
+  journal: string | null;
+  published_date: string | null;
+  doi: string | null;
+  abstract: string | null;
+}> {
+  const response = await openai.chat.completions.create({
+    model: MODEL,
+    messages: [
+      {
+        role: "system",
+        content: `あなたは学術論文のメタデータを抽出する専門家です。
+以下の論文テキスト（PDFから抽出）を分析し、メタデータをJSON形式で出力してください。
+
+出力形式（JSONのみ出力、他のテキストは不要）:
+{
+  "title": "論文タイトル（原文のまま）",
+  "authors": ["著者1", "著者2", ...],
+  "journal": "ジャーナル名または会議名（見つからなければnull）",
+  "published_date": "YYYY-MM-DD形式（年のみの場合はYYYY-01-01、見つからなければnull）",
+  "doi": "DOI（見つからなければnull）",
+  "abstract": "アブストラクト全文（見つからなければnull）"
+}
+
+注意事項：
+- テキストに記載されている情報のみを抽出してください
+- 推測や補完はしないでください
+- 著者名は論文に記載された表記のまま抽出してください
+- DOIは "10." で始まる文字列を探してください`,
+      },
+      { role: "user", content: text.slice(0, 4000) },
+    ],
+    temperature: 0.1,
+    max_tokens: 1000,
+    response_format: { type: "json_object" },
+  });
+
+  const content = response.choices[0]?.message?.content?.trim() || "{}";
+  try {
+    const parsed = JSON.parse(content);
+    return {
+      title: parsed.title || "",
+      authors: Array.isArray(parsed.authors) ? parsed.authors : [],
+      journal: parsed.journal || null,
+      published_date: parsed.published_date || null,
+      doi: parsed.doi || null,
+      abstract: parsed.abstract || null,
+    };
+  } catch {
+    return { title: "", authors: [], journal: null, published_date: null, doi: null, abstract: null };
+  }
+}
+
 export async function processAllAI(paper: {
   title_original: string;
   authors?: string[];

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { extractMetadata } from "@/lib/openai";
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,17 +18,44 @@ export async function POST(request: NextRequest) {
     const pdfParse = require("pdf-parse/lib/pdf-parse");
     const pdfData = await pdfParse(buffer);
 
-    // PDFメタデータから情報を抽出
-    const info = pdfData.info || {};
-    const text = pdfData.text || "";
+    const text = (pdfData.text || "") as string;
 
-    // テキストの先頭部分からタイトルを推定（最初の改行まで）
-    const lines = text.split("\n").filter((l: string) => l.trim().length > 0);
-    const estimatedTitle = lines[0]?.trim() || "";
+    // AIでメタデータを構造化抽出
+    let metadata = {
+      title: "",
+      authors: [] as string[],
+      journal: null as string | null,
+      published_date: null as string | null,
+      doi: null as string | null,
+      abstract: null as string | null,
+    };
+
+    if (text.length > 50) {
+      try {
+        metadata = await extractMetadata(text);
+      } catch (e) {
+        console.error("[PDF Parse] AI metadata extraction failed:", e);
+        // AI抽出失敗時はPDFメタデータにフォールバック
+      }
+    }
+
+    // AIで取得できなかった場合はPDFメタデータにフォールバック
+    const info = pdfData.info || {};
+    if (!metadata.title) {
+      const lines = text.split("\n").filter((l: string) => l.trim().length > 0);
+      metadata.title = info.Title || lines[0]?.trim() || "";
+    }
+    if (metadata.authors.length === 0 && info.Author) {
+      metadata.authors = info.Author.split(/[,;]/).map((a: string) => a.trim()).filter(Boolean);
+    }
 
     return NextResponse.json({
-      title: info.Title || estimatedTitle,
-      author: info.Author || "",
+      title: metadata.title,
+      authors: metadata.authors,
+      journal: metadata.journal,
+      published_date: metadata.published_date,
+      doi: metadata.doi,
+      abstract: metadata.abstract,
       text: text.slice(0, 12000),
       pages: pdfData.numpages,
     });
