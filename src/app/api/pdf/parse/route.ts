@@ -11,9 +11,10 @@ export async function POST(request: NextRequest) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    // pdf-parseはESM default exportがないためrequireで読み込む
+    // pdf-parse v1はrequire("pdf-parse")だとテストファイルを読み込むバグがあるため
+    // lib/pdf-parseから直接読み込む
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdfParse = require("pdf-parse");
+    const pdfParse = require("pdf-parse/lib/pdf-parse");
     const pdfData = await pdfParse(buffer);
 
     // PDFメタデータから情報を抽出
@@ -31,6 +32,7 @@ export async function POST(request: NextRequest) {
       pages: pdfData.numpages,
     });
   } catch (error) {
+    console.error("[PDF Parse Error]", error);
     const message = error instanceof Error ? error.message : "PDF解析に失敗しました";
     return NextResponse.json({ error: message }, { status: 500 });
   }

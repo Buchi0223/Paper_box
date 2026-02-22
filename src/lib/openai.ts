@@ -45,6 +45,23 @@ const TRANSLATE_PROMPT = `以下の英語の論文タイトルを、学術的に
 
 // ---------- 論文情報を構造化テキストに変換 ----------
 
+// PDFから抽出したテキストをクリーニング
+function cleanPdfText(raw: string): string {
+  return raw
+    // 不要なヘッダー・フッター的パターンを除去
+    .replace(/\f/g, "\n") // フォームフィード除去
+    .replace(/\r\n/g, "\n")
+    // 単語途中の改行を結合（行末がハイフンの場合）
+    .replace(/-\n(\S)/g, "$1")
+    // 行末の改行を結合（文の途中の改行を空白に置換）
+    .replace(/([a-zA-Z,;])\n([a-zA-Z])/g, "$1 $2")
+    // 連続空白を1つに
+    .replace(/[ \t]+/g, " ")
+    // 3つ以上の連続改行を2つに
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function extractAbstract(text: string): string | null {
   const patterns = [
     /abstract[\s.:：\-]*\n?([\s\S]{100,2000}?)(?:\n\s*\n|\n(?:1[\s.]|I[\s.]|introduction|keywords|key\s*words))/i,
@@ -69,14 +86,15 @@ function buildPaperContext(paper: {
   }
 
   // アブストラクトを抽出（明示的に指定されていればそちらを優先）
-  const abstract = paper.abstract || (paper.text ? extractAbstract(paper.text) : null);
+  const cleanedText = paper.text ? cleanPdfText(paper.text) : null;
+  const abstract = paper.abstract || (cleanedText ? extractAbstract(cleanedText) : null);
   if (abstract) {
     parts.push(`アブストラクト:\n${abstract}`);
   }
 
-  if (paper.text) {
+  if (cleanedText) {
     // トークン上限を考慮してテキストを制限（約8000文字）
-    const truncatedText = paper.text.slice(0, 8000);
+    const truncatedText = cleanedText.slice(0, 8000);
     parts.push(`本文（抜粋）:\n${truncatedText}`);
   }
   return parts.join("\n\n");
