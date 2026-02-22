@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { extractMetadata } from "@/lib/openai";
+import { extractMetadata } from "@/lib/ai";
 
 export async function POST(request: NextRequest) {
   try {

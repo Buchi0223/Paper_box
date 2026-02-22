@@ -5,7 +5,7 @@ import {
   searchSemanticScholar,
   type SemanticScholarPaper,
 } from "@/lib/semantic-scholar";
-import { processAllAI } from "@/lib/openai";
+import { processAllAI } from "@/lib/ai";
 
 type Keyword = {
   id: string;

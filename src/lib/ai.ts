@@ -1,10 +1,26 @@
-import OpenAI from "openai";
+import { GoogleGenAI } from "@google/genai";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const MODEL = "gemini-2.5-flash";
 
-const MODEL = "gpt-4o";
+// 遅延初期化（ビルド時にAPIキーが不要になるように）
+let _ai: GoogleGenAI | null = null;
+function getClient(): GoogleGenAI {
+  if (!_ai) {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY is not set");
+    }
+    _ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  }
+  return _ai;
+}
+
+// ---------- 使用量の型 ----------
+
+type TokenUsage = {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+};
 
 // ---------- プロンプトテンプレート ----------
 
@@ -100,6 +116,17 @@ function buildPaperContext(paper: {
   return parts.join("\n\n");
 }
 
+// ---------- ヘルパー ----------
+
+function extractUsage(response: { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } }): TokenUsage {
+  const meta = response.usageMetadata;
+  return {
+    prompt_tokens: meta?.promptTokenCount || 0,
+    completion_tokens: meta?.candidatesTokenCount || 0,
+    total_tokens: meta?.totalTokenCount || 0,
+  };
+}
+
 // ---------- API関数 ----------
 
 export async function summarizePaper(paper: {
@@ -107,20 +134,21 @@ export async function summarizePaper(paper: {
   authors?: string[];
   abstract?: string;
   text?: string;
-}): Promise<{ summary: string; usage?: OpenAI.CompletionUsage }> {
-  const response = await openai.chat.completions.create({
+}): Promise<{ summary: string; usage?: TokenUsage }> {
+  const response = await getClient().models.generateContent({
     model: MODEL,
-    messages: [
-      { role: "system", content: SUMMARIZE_PROMPT },
-      { role: "user", content: buildPaperContext(paper) },
-    ],
-    temperature: 0.3,
-    max_tokens: 1000,
+    contents: buildPaperContext(paper),
+    config: {
+      systemInstruction: SUMMARIZE_PROMPT,
+      temperature: 0.3,
+      maxOutputTokens: 1000,
+      thinkingConfig: { thinkingBudget: 0 },
+    },
   });
 
   return {
-    summary: response.choices[0]?.message?.content?.trim() || "",
-    usage: response.usage ?? undefined,
+    summary: response.text?.trim() || "",
+    usage: extractUsage(response),
   };
 }
 
@@ -129,39 +157,41 @@ export async function explainPaper(paper: {
   authors?: string[];
   abstract?: string;
   text?: string;
-}): Promise<{ explanation: string; usage?: OpenAI.CompletionUsage }> {
-  const response = await openai.chat.completions.create({
+}): Promise<{ explanation: string; usage?: TokenUsage }> {
+  const response = await getClient().models.generateContent({
     model: MODEL,
-    messages: [
-      { role: "system", content: EXPLAIN_PROMPT },
-      { role: "user", content: buildPaperContext(paper) },
-    ],
-    temperature: 0.3,
-    max_tokens: 2000,
+    contents: buildPaperContext(paper),
+    config: {
+      systemInstruction: EXPLAIN_PROMPT,
+      temperature: 0.3,
+      maxOutputTokens: 2000,
+      thinkingConfig: { thinkingBudget: 0 },
+    },
   });
 
   return {
-    explanation: response.choices[0]?.message?.content?.trim() || "",
-    usage: response.usage ?? undefined,
+    explanation: response.text?.trim() || "",
+    usage: extractUsage(response),
   };
 }
 
 export async function translateTitle(
   title: string,
-): Promise<{ title_ja: string; usage?: OpenAI.CompletionUsage }> {
-  const response = await openai.chat.completions.create({
+): Promise<{ title_ja: string; usage?: TokenUsage }> {
+  const response = await getClient().models.generateContent({
     model: MODEL,
-    messages: [
-      { role: "system", content: TRANSLATE_PROMPT },
-      { role: "user", content: title },
-    ],
-    temperature: 0.1,
-    max_tokens: 200,
+    contents: title,
+    config: {
+      systemInstruction: TRANSLATE_PROMPT,
+      temperature: 0.1,
+      maxOutputTokens: 200,
+      thinkingConfig: { thinkingBudget: 0 },
+    },
   });
 
   return {
-    title_ja: response.choices[0]?.message?.content?.trim() || "",
-    usage: response.usage ?? undefined,
+    title_ja: response.text?.trim() || "",
+    usage: extractUsage(response),
   };
 }
 
@@ -174,12 +204,11 @@ export async function extractMetadata(text: string): Promise<{
   doi: string | null;
   abstract: string | null;
 }> {
-  const response = await openai.chat.completions.create({
+  const response = await getClient().models.generateContent({
     model: MODEL,
-    messages: [
-      {
-        role: "system",
-        content: `あなたは学術論文のメタデータを抽出する専門家です。
+    contents: text.slice(0, 4000),
+    config: {
+      systemInstruction: `あなたは学術論文のメタデータを抽出する専門家です。
 以下の論文テキスト（PDFから抽出）を分析し、メタデータをJSON形式で出力してください。
 
 出力形式（JSONのみ出力、他のテキストは不要）:
@@ -197,15 +226,14 @@ export async function extractMetadata(text: string): Promise<{
 - 推測や補完はしないでください
 - 著者名は論文に記載された表記のまま抽出してください
 - DOIは "10." で始まる文字列を探してください`,
-      },
-      { role: "user", content: text.slice(0, 4000) },
-    ],
-    temperature: 0.1,
-    max_tokens: 1000,
-    response_format: { type: "json_object" },
+      responseMimeType: "application/json",
+      temperature: 0.1,
+      maxOutputTokens: 1000,
+      thinkingConfig: { thinkingBudget: 0 },
+    },
   });
 
-  const content = response.choices[0]?.message?.content?.trim() || "{}";
+  const content = response.text?.trim() || "{}";
   try {
     const parsed = JSON.parse(content);
     return {
