@@ -18,8 +18,8 @@
 |---------|------|------|
 | フロントエンド | Next.js (App Router) | TypeScript, Tailwind CSS |
 | バックエンド | Next.js API Routes + Supabase | サーバーレス |
-| データベース | Supabase (PostgreSQL) | RLS無効（個人利用のため） |
-| AI | OpenAI API (GPT-4o) | 要約・解説・翻訳生成 |
+| データベース | Supabase (PostgreSQL) | RLS有効（Service Role Keyでバイパス） |
+| AI | Google Gemini API (Gemini 2.5 Flash) | 要約・解説・翻訳・メタデータ抽出 |
 | 論文検索API | Semantic Scholar / arXiv API | 論文メタデータ取得 |
 | ファイル保管 | Google Drive API | ダウンロード論文の保管 |
 | デプロイ | Vercel | GitHub連携で自動デプロイ |
@@ -42,11 +42,12 @@
 - 新規論文のみを取得（重複排除: DOIベース）
 - 取得した論文メタデータをDBに保存
 
-#### 3.1.3 AI処理（OpenAI API）
+#### 3.1.3 AI処理（Gemini API）
 収集した論文に対して以下を自動生成：
 - **日本語タイトル**: 原題の日本語訳
 - **要約（Abstract要約）**: 300文字程度の日本語要約
 - **解説**: 研究の背景・手法・結果・意義を平易に説明（500〜800文字）
+- **メタデータ構造化抽出**: PDFテキストからタイトル・著者・ジャーナル・DOI等をJSON形式で抽出
 
 #### 3.1.4 保存データ
 各論文について以下を保存：
@@ -116,7 +117,7 @@
   - ジャーナル/会議名
   - DOI（任意）
   - 元論文URL（任意）
-- PDFアップロード時、可能な範囲でメタデータ自動抽出
+- PDFアップロード時、AIによるメタデータ自動抽出（タイトル・著者・ジャーナル・発行日・DOI・アブストラクト）
 
 #### 3.3.2 AI自動処理
 アップロードされたPDFに対して：
@@ -260,10 +261,12 @@
 - **arXiv API**: OAI-PMH / Atom Feed。無料。主にCS・物理・数学系
 - **Semantic Scholar API**: REST API。無料枠あり。幅広い分野対応
 
-### 7.2 OpenAI API
-- **モデル**: GPT-4o
-- **用途**: 要約生成、解説生成、タイトル翻訳
-- **コスト管理**: トークン使用量をログに記録
+### 7.2 Google Gemini API
+- **モデル**: Gemini 2.5 Flash（`@google/genai` SDK）
+- **用途**: 要約生成、解説生成、タイトル翻訳、PDFメタデータ構造化抽出
+- **コスト**: 無料枠（500リクエスト/日）で運用。個人利用では十分
+- **設定**: 思考機能（Thinking）は無効化（`thinkingBudget: 0`）、JSON構造化出力対応
+- **変更履歴**: 当初OpenAI GPT-4oを使用していたが、コスト削減のため2025年2月にGemini 2.5 Flashに移行
 
 ### 7.3 Google Drive API
 - **認証**: サービスアカウント方式
@@ -279,8 +282,8 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 
-# OpenAI
-OPENAI_API_KEY=
+# Google Gemini
+GEMINI_API_KEY=
 
 # Google Drive
 GOOGLE_SERVICE_ACCOUNT_KEY=
@@ -311,8 +314,9 @@ CRON_SECRET=
 - Google Drive連携
 
 ### Phase 4: AI連携
-- OpenAI API連携（要約・解説・翻訳）
+- Google Gemini API連携（要約・解説・翻訳・メタデータ抽出）
 - 手動登録時の自動AI処理
+- PDFアップロード時のAIメタデータ自動抽出
 
 ### Phase 5: 自動収集
 - arXiv API / Semantic Scholar API 連携
@@ -325,3 +329,16 @@ CRON_SECRET=
 - ダークモード
 - パフォーマンス最適化
 - Vercelデプロイ・動作確認
+
+---
+
+## 10. 変更履歴
+
+| 日付 | 変更内容 |
+|------|----------|
+| 2025-02-22 | AI バックエンドを OpenAI GPT-4o から Google Gemini 2.5 Flash に移行（コスト削減：無料枠活用） |
+| 2025-02-22 | PDFアップロード時のAIメタデータ自動抽出機能を追加（タイトル・著者・ジャーナル・DOI等） |
+| 2025-02-22 | AI要約精度を改善（プロンプト強化、PDFテキストクリーニング、アブストラクト抽出） |
+| 2025-02-22 | pdf-parse v2→v1.1.1にダウングレード（@napi-rs/canvas依存エラー回避） |
+| 2025-02-22 | Supabase RLS有効化、サーバーサイドでService Role Keyを使用 |
+| 2025-02-22 | Vercelデプロイ修正（正しいGitHubリポジトリに接続） |
