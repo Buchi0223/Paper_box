@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       title: info.Title || estimatedTitle,
       author: info.Author || "",
-      text: text.slice(0, 3000),
+      text: text.slice(0, 12000),
       pages: pdfData.numpages,
     });
   } catch (error) {

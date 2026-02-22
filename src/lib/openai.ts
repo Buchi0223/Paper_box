@@ -10,6 +10,12 @@ const MODEL = "gpt-4o";
 
 const SUMMARIZE_PROMPT = `あなたは学術論文の要約を行う専門家です。
 以下の論文情報をもとに、日本語で300文字程度の要約を作成してください。
+
+重要な注意事項：
+- 提供された論文テキストの内容のみに基づいて要約してください
+- テキストに記載されていない情報を推測や補完しないでください
+- 論文の分野・領域はテキストの内容から正確に判断してください
+
 要約は以下の点をカバーしてください：
 - 研究の目的
 - 主要な手法
@@ -19,6 +25,12 @@ const SUMMARIZE_PROMPT = `あなたは学術論文の要約を行う専門家で
 
 const EXPLAIN_PROMPT = `あなたは学術論文をわかりやすく解説する専門家です。
 以下の論文情報をもとに、日本語で500〜800文字の解説を作成してください。
+
+重要な注意事項：
+- 提供された論文テキストの内容のみに基づいて解説してください
+- テキストに記載されていない情報を推測や補完しないでください
+- 論文の分野・領域はテキストの内容から正確に判断してください
+
 解説は以下の構成で記述してください：
 - 研究の背景と動機
 - 提案手法の概要
@@ -33,6 +45,18 @@ const TRANSLATE_PROMPT = `以下の英語の論文タイトルを、学術的に
 
 // ---------- 論文情報を構造化テキストに変換 ----------
 
+function extractAbstract(text: string): string | null {
+  const patterns = [
+    /abstract[\s.:：\-]*\n?([\s\S]{100,2000}?)(?:\n\s*\n|\n(?:1[\s.]|I[\s.]|introduction|keywords|key\s*words))/i,
+    /要旨[\s.:：\-]*\n?([\s\S]{100,2000}?)(?:\n\s*\n)/,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) return match[1].trim();
+  }
+  return null;
+}
+
 function buildPaperContext(paper: {
   title_original: string;
   authors?: string[];
@@ -43,11 +67,17 @@ function buildPaperContext(paper: {
   if (paper.authors?.length) {
     parts.push(`著者: ${paper.authors.join(", ")}`);
   }
-  if (paper.abstract) {
-    parts.push(`アブストラクト:\n${paper.abstract}`);
+
+  // アブストラクトを抽出（明示的に指定されていればそちらを優先）
+  const abstract = paper.abstract || (paper.text ? extractAbstract(paper.text) : null);
+  if (abstract) {
+    parts.push(`アブストラクト:\n${abstract}`);
   }
+
   if (paper.text) {
-    parts.push(`本文（抜粋）:\n${paper.text}`);
+    // トークン上限を考慮してテキストを制限（約8000文字）
+    const truncatedText = paper.text.slice(0, 8000);
+    parts.push(`本文（抜粋）:\n${truncatedText}`);
   }
   return parts.join("\n\n");
 }
