@@ -5,6 +5,7 @@ import {
   searchSemanticScholar,
   type SemanticScholarPaper,
 } from "@/lib/semantic-scholar";
+import { searchOpenAlex, type OpenAlexPaper } from "@/lib/openalex";
 import { processAllAI } from "@/lib/ai";
 
 type Keyword = {
@@ -82,6 +83,19 @@ async function collectForKeyword(kw: Keyword): Promise<CollectResult> {
       } catch (e) {
         console.error(
           `Semantic Scholar search failed for "${kw.keyword}":`,
+          e,
+        );
+      }
+    }
+
+    // OpenAlexから収集
+    if (kw.sources.includes("OpenAlex")) {
+      try {
+        const oaPapers = await searchOpenAlex(kw.keyword, 5);
+        normalizedPapers.push(...oaPapers.map(normalizeOpenAlex));
+      } catch (e) {
+        console.error(
+          `OpenAlex search failed for "${kw.keyword}":`,
           e,
         );
       }
@@ -190,6 +204,18 @@ function normalizeArxiv(paper: ArxivPaper): NormalizedPaper {
 }
 
 function normalizeS2(paper: SemanticScholarPaper): NormalizedPaper {
+  return {
+    title: paper.title,
+    authors: paper.authors,
+    abstract: paper.abstract,
+    published_date: paper.published,
+    doi: paper.doi,
+    url: paper.url,
+    venue: paper.venue,
+  };
+}
+
+function normalizeOpenAlex(paper: OpenAlexPaper): NormalizedPaper {
   return {
     title: paper.title,
     authors: paper.authors,

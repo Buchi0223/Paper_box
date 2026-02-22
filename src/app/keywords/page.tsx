@@ -11,7 +11,7 @@ type Keyword = {
   created_at: string;
 };
 
-const AVAILABLE_SOURCES = ["arXiv", "Semantic Scholar"];
+const AVAILABLE_SOURCES = ["arXiv", "Semantic Scholar", "OpenAlex"];
 
 export default function KeywordsPage() {
   const [keywords, setKeywords] = useState<Keyword[]>([]);
@@ -488,7 +488,7 @@ export default function KeywordsPage() {
         <p className="text-xs text-gray-500 dark:text-gray-400">
           登録したキーワードで定期的に論文を自動収集します。
           有効なキーワードのみが収集対象になります。
-          検索対象ソースはarXivとSemantic Scholarから選択できます。
+          検索対象ソースはarXiv、Semantic Scholar、OpenAlexから選択できます。
         </p>
       </div>
     </div>

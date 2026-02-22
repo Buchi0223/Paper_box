@@ -20,7 +20,7 @@
 | バックエンド | Next.js API Routes + Supabase | サーバーレス |
 | データベース | Supabase (PostgreSQL) | RLS有効（Service Role Keyでバイパス） |
 | AI | Google Gemini API (Gemini 2.5 Flash) | 要約・解説・翻訳・メタデータ抽出 |
-| 論文検索API | Semantic Scholar / arXiv API | 論文メタデータ取得 |
+| 論文検索API | Semantic Scholar / arXiv API / OpenAlex API | 論文メタデータ取得 |
 | ファイル保管 | Google Drive API | ダウンロード論文の保管 |
 | デプロイ | Vercel | GitHub連携で自動デプロイ |
 | 定期実行 | Vercel Cron Jobs | 論文自動収集のスケジューリング |
@@ -260,6 +260,7 @@
 ### 7.1 論文検索API
 - **arXiv API**: OAI-PMH / Atom Feed。無料。主にCS・物理・数学系
 - **Semantic Scholar API**: REST API。無料枠あり。幅広い分野対応
+- **OpenAlex API**: REST API。完全無料・APIキー不要。25億件以上の学術文献をカバー。Elsevier等の商用出版社の論文も含む。`mailto`パラメータでPolite pool（高速レスポンス）利用可能
 
 ### 7.2 Google Gemini API
 - **モデル**: Gemini 2.5 Flash（`@google/genai` SDK）
@@ -288,6 +289,9 @@ GEMINI_API_KEY=
 # Google Drive
 GOOGLE_SERVICE_ACCOUNT_KEY=
 GOOGLE_DRIVE_FOLDER_ID=
+
+# OpenAlex（任意: Polite pool用メールアドレス）
+OPENALEX_EMAIL=
 
 # Cron
 CRON_SECRET=
@@ -319,7 +323,7 @@ CRON_SECRET=
 - PDFアップロード時のAIメタデータ自動抽出
 
 ### Phase 5: 自動収集
-- arXiv API / Semantic Scholar API 連携
+- arXiv API / Semantic Scholar API / OpenAlex API 連携
 - キーワード管理画面
 - Vercel Cron Jobsによる定期実行
 - 収集ログ
@@ -342,3 +346,4 @@ CRON_SECRET=
 | 2025-02-22 | pdf-parse v2→v1.1.1にダウングレード（@napi-rs/canvas依存エラー回避） |
 | 2025-02-22 | Supabase RLS有効化、サーバーサイドでService Role Keyを使用 |
 | 2025-02-22 | Vercelデプロイ修正（正しいGitHubリポジトリに接続） |
+| 2026-02-22 | 論文検索ソースにOpenAlex APIを追加（完全無料、25億件以上の学術文献カバー） |
