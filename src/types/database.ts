@@ -93,6 +93,7 @@ export type Keyword = {
   keyword: string;
   category: string | null;
   sources: string[];
+  journals: string[];
   is_active: boolean;
   created_at: string;
 };
@@ -102,6 +103,7 @@ export type KeywordInsert = {
   keyword: string;
   category?: string | null;
   sources?: string[];
+  journals?: string[];
   is_active?: boolean;
   created_at?: string;
 };
@@ -111,6 +113,7 @@ export type KeywordUpdate = {
   keyword?: string;
   category?: string | null;
   sources?: string[];
+  journals?: string[];
   is_active?: boolean;
   created_at?: string;
 };

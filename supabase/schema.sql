@@ -30,6 +30,7 @@ CREATE TABLE keywords (
   keyword TEXT NOT NULL,
   category TEXT,
   sources TEXT[] NOT NULL DEFAULT '{arXiv}',
+  journals TEXT[] NOT NULL DEFAULT '{}',
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

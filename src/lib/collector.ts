@@ -12,6 +12,7 @@ type Keyword = {
   id: string;
   keyword: string;
   sources: string[];
+  journals: string[];
   is_active: boolean;
 };
 
@@ -104,8 +105,11 @@ async function collectForKeyword(kw: Keyword): Promise<CollectResult> {
     // DOIベースの重複排除
     const uniquePapers = deduplicatePapers(normalizedPapers);
 
+    // ジャーナルフィルタリング
+    const journalFiltered = filterByJournals(uniquePapers, kw.journals);
+
     // DB内の既存論文との重複チェック（DOIベース）
-    const newPapers = await filterExisting(uniquePapers);
+    const newPapers = await filterExisting(journalFiltered);
 
     let savedCount = 0;
 
@@ -160,7 +164,9 @@ async function collectForKeyword(kw: Keyword): Promise<CollectResult> {
       keyword: kw.keyword,
       status: "success",
       papers_found: savedCount,
-      message: `${uniquePapers.length}件中${savedCount}件を新規登録`,
+      message: kw.journals.length > 0
+        ? `${uniquePapers.length}件中${journalFiltered.length}件がジャーナルフィルタ通過、${savedCount}件を新規登録`
+        : `${uniquePapers.length}件中${savedCount}件を新規登録`,
     };
 
     await supabase.from("collection_logs").insert({
@@ -225,6 +231,27 @@ function normalizeOpenAlex(paper: OpenAlexPaper): NormalizedPaper {
     url: paper.url,
     venue: paper.venue,
   };
+}
+
+/**
+ * ジャーナル名でフィルタリングする（部分一致・大文字小文字無視）
+ * journals が空配列の場合はフィルタリングしない（全て通す）
+ */
+function filterByJournals(
+  papers: NormalizedPaper[],
+  journals: string[],
+): NormalizedPaper[] {
+  if (!journals || journals.length === 0) {
+    return papers;
+  }
+
+  const lowerJournals = journals.map((j) => j.toLowerCase().trim());
+
+  return papers.filter((paper) => {
+    if (!paper.venue) return false;
+    const lowerVenue = paper.venue.toLowerCase();
+    return lowerJournals.some((j) => lowerVenue.includes(j));
+  });
 }
 
 /**

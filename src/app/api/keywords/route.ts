@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
     keyword: body.keyword.trim(),
     category: body.category?.trim() || null,
     sources: body.sources || ["arXiv"],
+    journals: body.journals || [],
     is_active: body.is_active !== undefined ? body.is_active : true,
   };
 

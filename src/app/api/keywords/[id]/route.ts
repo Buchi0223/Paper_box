@@ -14,6 +14,7 @@ export async function PATCH(
   if (body.category !== undefined)
     updateData.category = body.category?.trim() || null;
   if (body.sources !== undefined) updateData.sources = body.sources;
+  if (body.journals !== undefined) updateData.journals = body.journals;
   if (body.is_active !== undefined) updateData.is_active = body.is_active;
 
   if (Object.keys(updateData).length === 0) {

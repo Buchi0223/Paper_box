@@ -7,6 +7,7 @@ type Keyword = {
   keyword: string;
   category: string | null;
   sources: string[];
+  journals: string[];
   is_active: boolean;
   created_at: string;
 };
@@ -23,6 +24,8 @@ export default function KeywordsPage() {
   const [newKeyword, setNewKeyword] = useState("");
   const [newCategory, setNewCategory] = useState("");
   const [newSources, setNewSources] = useState<string[]>(["arXiv"]);
+  const [newJournals, setNewJournals] = useState<string[]>([]);
+  const [newJournalInput, setNewJournalInput] = useState("");
   const [isAdding, setIsAdding] = useState(false);
 
   // 編集中のキーワード
@@ -30,6 +33,8 @@ export default function KeywordsPage() {
   const [editKeyword, setEditKeyword] = useState("");
   const [editCategory, setEditCategory] = useState("");
   const [editSources, setEditSources] = useState<string[]>([]);
+  const [editJournals, setEditJournals] = useState<string[]>([]);
+  const [editJournalInput, setEditJournalInput] = useState("");
 
   // 削除確認
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -66,6 +71,7 @@ export default function KeywordsPage() {
           keyword: newKeyword.trim(),
           category: newCategory.trim() || null,
           sources: newSources,
+          journals: newJournals,
         }),
       });
 
@@ -78,6 +84,8 @@ export default function KeywordsPage() {
       setNewKeyword("");
       setNewCategory("");
       setNewSources(["arXiv"]);
+      setNewJournals([]);
+      setNewJournalInput("");
       setShowForm(false);
       await fetchKeywords();
     } catch {
@@ -114,6 +122,8 @@ export default function KeywordsPage() {
     setEditKeyword(kw.keyword);
     setEditCategory(kw.category || "");
     setEditSources([...kw.sources]);
+    setEditJournals([...(kw.journals || [])]);
+    setEditJournalInput("");
   };
 
   // 編集保存
@@ -128,6 +138,7 @@ export default function KeywordsPage() {
           keyword: editKeyword.trim(),
           category: editCategory.trim() || null,
           sources: editSources,
+          journals: editJournals,
         }),
       });
 
@@ -171,6 +182,29 @@ export default function KeywordsPage() {
     } else {
       setSources([...sources, source]);
     }
+  };
+
+  // ジャーナル追加
+  const handleAddJournal = (
+    input: string,
+    journals: string[],
+    setJournals: (j: string[]) => void,
+    setInput: (s: string) => void,
+  ) => {
+    const trimmed = input.trim();
+    if (trimmed && !journals.includes(trimmed)) {
+      setJournals([...journals, trimmed]);
+    }
+    setInput("");
+  };
+
+  // ジャーナル削除
+  const handleRemoveJournal = (
+    journal: string,
+    journals: string[],
+    setJournals: (j: string[]) => void,
+  ) => {
+    setJournals(journals.filter((j) => j !== journal));
   };
 
   if (isLoading) {
@@ -271,6 +305,53 @@ export default function KeywordsPage() {
                 ))}
               </div>
             </div>
+            <div>
+              <label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">
+                対象ジャーナル（任意・部分一致）
+              </label>
+              {newJournals.length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-1">
+                  {newJournals.map((journal) => (
+                    <span
+                      key={journal}
+                      className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-0.5 text-xs text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                    >
+                      {journal}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleRemoveJournal(journal, newJournals, setNewJournals)
+                        }
+                        className="hover:text-green-900 dark:hover:text-green-200"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <input
+                type="text"
+                value={newJournalInput}
+                onChange={(e) => setNewJournalInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAddJournal(
+                      newJournalInput,
+                      newJournals,
+                      setNewJournals,
+                      setNewJournalInput,
+                    );
+                  }
+                }}
+                placeholder="ジャーナル名を入力してEnterで追加（例: Nature, Science）"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+              />
+              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                空欄の場合は全てのジャーナルから収集します
+              </p>
+            </div>
             <div className="flex gap-2 pt-1">
               <button
                 onClick={handleAdd}
@@ -358,6 +439,50 @@ export default function KeywordsPage() {
                       </button>
                     ))}
                   </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">
+                      対象ジャーナル（部分一致）
+                    </label>
+                    {editJournals.length > 0 && (
+                      <div className="mb-2 flex flex-wrap gap-1">
+                        {editJournals.map((journal) => (
+                          <span
+                            key={journal}
+                            className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-0.5 text-xs text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                          >
+                            {journal}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleRemoveJournal(journal, editJournals, setEditJournals)
+                              }
+                              className="hover:text-green-900 dark:hover:text-green-200"
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <input
+                      type="text"
+                      value={editJournalInput}
+                      onChange={(e) => setEditJournalInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddJournal(
+                            editJournalInput,
+                            editJournals,
+                            setEditJournals,
+                            setEditJournalInput,
+                          );
+                        }
+                      }}
+                      placeholder="ジャーナル名を入力してEnterで追加"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                    />
+                  </div>
                   <div className="flex gap-2">
                     <button
                       onClick={handleSaveEdit}
@@ -392,13 +517,21 @@ export default function KeywordsPage() {
                         </span>
                       )}
                     </div>
-                    <div className="mt-1 flex gap-1">
+                    <div className="mt-1 flex flex-wrap gap-1">
                       {kw.sources.map((s) => (
                         <span
                           key={s}
                           className="rounded bg-blue-100 px-1.5 py-0.5 text-xs text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
                         >
                           {s}
+                        </span>
+                      ))}
+                      {kw.journals && kw.journals.length > 0 && kw.journals.map((j) => (
+                        <span
+                          key={j}
+                          className="rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                        >
+                          {j}
                         </span>
                       ))}
                     </div>
@@ -489,6 +622,7 @@ export default function KeywordsPage() {
           登録したキーワードで定期的に論文を自動収集します。
           有効なキーワードのみが収集対象になります。
           検索対象ソースはarXiv、Semantic Scholar、OpenAlexから選択できます。
+          対象ジャーナルを指定すると、そのジャーナルの論文のみ収集します（部分一致）。
         </p>
       </div>
     </div>
