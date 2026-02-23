@@ -7,6 +7,12 @@ import {
 } from "@/lib/semantic-scholar";
 import { searchOpenAlex, type OpenAlexPaper } from "@/lib/openalex";
 import { processAllAI } from "@/lib/ai";
+import {
+  scoreRelevance,
+  determineReviewStatus,
+  getReviewSettings,
+  type ReviewSettings,
+} from "@/lib/scoring";
 
 type Keyword = {
   id: string;
@@ -49,10 +55,20 @@ export async function collectAllPapers(): Promise<CollectResult[]> {
     return [];
   }
 
+  // スコアリング設定と関心プロファイルを事前に取得
+  const settings = await getReviewSettings();
+  let interests: { label: string; weight: number }[] = [];
+  if (settings.scoring_enabled) {
+    const { data: interestData } = await supabase
+      .from("interests")
+      .select("label, weight");
+    interests = interestData || [];
+  }
+
   const results: CollectResult[] = [];
 
   for (const kw of keywords as Keyword[]) {
-    const result = await collectForKeyword(kw);
+    const result = await collectForKeyword(kw, settings, interests);
     results.push(result);
   }
 
@@ -62,7 +78,11 @@ export async function collectAllPapers(): Promise<CollectResult[]> {
 /**
  * 特定のキーワードに対して論文収集を実行する
  */
-async function collectForKeyword(kw: Keyword): Promise<CollectResult> {
+async function collectForKeyword(
+  kw: Keyword,
+  settings: ReviewSettings,
+  interests: { label: string; weight: number }[],
+): Promise<CollectResult> {
   try {
     const normalizedPapers: NormalizedPaper[] = [];
 
@@ -122,6 +142,28 @@ async function collectForKeyword(kw: Keyword): Promise<CollectResult> {
           abstract: paper.abstract || undefined,
         });
 
+        // AIスコアリング
+        let relevanceScore: number | null = null;
+        let reviewStatus = "pending";
+
+        if (settings.scoring_enabled && interests.length > 0) {
+          try {
+            relevanceScore = await scoreRelevance(
+              {
+                title_original: paper.title,
+                title_ja: aiResult.title_ja || null,
+                authors: paper.authors,
+                abstract: paper.abstract,
+                summary_ja: aiResult.summary_ja || null,
+              },
+              interests,
+            );
+            reviewStatus = determineReviewStatus(relevanceScore, settings);
+          } catch (e) {
+            console.error(`Scoring failed for "${paper.title}":`, e);
+          }
+        }
+
         // DBに保存
         const { error: insertError } = await supabase.from("papers").insert({
           title_original: paper.title,
@@ -135,6 +177,8 @@ async function collectForKeyword(kw: Keyword): Promise<CollectResult> {
           summary_ja: aiResult.summary_ja || null,
           explanation_ja: aiResult.explanation_ja || null,
           source: "auto",
+          relevance_score: relevanceScore,
+          review_status: reviewStatus,
         });
 
         if (!insertError) {

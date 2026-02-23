@@ -113,30 +113,43 @@ export async function scoreRelevance(
 
   const contents = `## 関心プロファイル\n${interestsList}\n\n## 論文情報\n${paperParts.join("\n")}`;
 
-  const response = await getClient().models.generateContent({
-    model: MODEL,
-    contents,
-    config: {
-      systemInstruction: SCORING_PROMPT,
-      temperature: 0.1,
-      maxOutputTokens: 300,
-      responseMimeType: "application/json",
-      thinkingConfig: { thinkingBudget: 1024 },
-    },
-  });
+  let text = "";
+  try {
+    const response = await getClient().models.generateContent({
+      model: MODEL,
+      contents,
+      config: {
+        systemInstruction: SCORING_PROMPT,
+        temperature: 0.1,
+        maxOutputTokens: 300,
+        responseMimeType: "application/json",
+      },
+    });
 
-  const text = response.text?.trim() || "";
+    text = response.text?.trim() || "";
+  } catch (apiError) {
+    console.error("[Scoring] Gemini API error:", apiError);
+    return 50;
+  }
+
+  if (!text) {
+    console.warn("[Scoring] Empty response from Gemini API");
+    return 50;
+  }
 
   // JSON出力をパース
   try {
     const result = JSON.parse(text);
     const score = typeof result.score === "number" ? result.score : parseInt(result.score);
     if (isNaN(score) || score < 0 || score > 100) {
+      console.warn("[Scoring] Invalid score value:", result.score, "raw:", text);
       return 50;
     }
+    console.log(`[Scoring] score=${score}, matched=${result.matched_interests?.join(", ") || "none"}`);
     return score;
   } catch {
     // JSONパース失敗時：数値のみの出力にも対応（フォールバック）
+    console.warn("[Scoring] JSON parse failed, raw text:", text.slice(0, 200));
     const score = parseInt(text);
     if (isNaN(score) || score < 0 || score > 100) {
       return 50;
