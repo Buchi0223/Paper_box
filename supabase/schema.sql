@@ -19,6 +19,8 @@ CREATE TABLE papers (
   google_drive_url TEXT,
   is_favorite BOOLEAN NOT NULL DEFAULT FALSE,
   memo TEXT,
+  review_status TEXT NOT NULL DEFAULT 'approved',
+  relevance_score INTEGER,
   collected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -63,11 +65,36 @@ CREATE TABLE collection_logs (
   executed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 関心プロファイルテーブル
+CREATE TABLE interests (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  label TEXT NOT NULL,
+  type TEXT NOT NULL DEFAULT 'manual',
+  weight REAL NOT NULL DEFAULT 1.0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- スコアリング設定テーブル
+CREATE TABLE review_settings (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  key TEXT NOT NULL UNIQUE,
+  value TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 初期値
+INSERT INTO review_settings (key, value) VALUES
+  ('auto_approve_threshold', '70'),
+  ('auto_skip_threshold', '30'),
+  ('scoring_enabled', 'true');
+
 -- インデックス
 CREATE INDEX idx_papers_collected_at ON papers(collected_at DESC);
 CREATE INDEX idx_papers_is_favorite ON papers(is_favorite) WHERE is_favorite = TRUE;
 CREATE INDEX idx_papers_doi ON papers(doi) WHERE doi IS NOT NULL;
 CREATE INDEX idx_papers_source ON papers(source);
+CREATE INDEX idx_papers_review_status ON papers(review_status);
+CREATE INDEX idx_papers_relevance_score ON papers(relevance_score) WHERE relevance_score IS NOT NULL;
 CREATE INDEX idx_keywords_is_active ON keywords(is_active) WHERE is_active = TRUE;
 CREATE INDEX idx_rss_feeds_is_active ON rss_feeds(is_active) WHERE is_active = TRUE;
 CREATE INDEX idx_collection_logs_executed_at ON collection_logs(executed_at DESC);
@@ -89,3 +116,7 @@ CREATE TRIGGER papers_updated_at
 -- 全文検索用インデックス（日本語タイトル・原題・要約・メモ）
 CREATE INDEX idx_papers_fulltext ON papers
   USING GIN (to_tsvector('simple', coalesce(title_original, '') || ' ' || coalesce(title_ja, '') || ' ' || coalesce(summary_ja, '') || ' ' || coalesce(memo, '')));
+
+-- RLS ポリシー
+ALTER TABLE review_settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all for service role" ON review_settings FOR ALL USING (true);

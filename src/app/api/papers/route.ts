@@ -73,7 +73,8 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("papers")
       .select("*", { count: "exact" })
-      .in("id", paperIds);
+      .in("id", paperIds)
+      .in("review_status", ["approved", "auto_approved"]);
 
     if (favorite === "true") {
       query = query.eq("is_favorite", true);
@@ -111,8 +112,11 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // キーワードフィルタなしの通常クエリ
-  let query = supabase.from("papers").select("*", { count: "exact" });
+  // キーワードフィルタなしの通常クエリ（approved / auto_approved のみ表示）
+  let query = supabase
+    .from("papers")
+    .select("*", { count: "exact" })
+    .in("review_status", ["approved", "auto_approved"]);
 
   if (favorite === "true") {
     query = query.eq("is_favorite", true);

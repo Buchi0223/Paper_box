@@ -18,6 +18,12 @@ type CollectSummary = {
   errors: number;
 };
 
+type ScoringSettings = {
+  auto_approve_threshold: number;
+  auto_skip_threshold: number;
+  scoring_enabled: boolean;
+};
+
 export default function SettingsPage() {
   const [logs, setLogs] = useState<CollectionLog[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(true);
@@ -26,6 +32,56 @@ export default function SettingsPage() {
     null,
   );
   const [error, setError] = useState<string | null>(null);
+
+  // スコアリング設定
+  const [scoringSettings, setScoringSettings] = useState<ScoringSettings>({
+    auto_approve_threshold: 70,
+    auto_skip_threshold: 30,
+    scoring_enabled: true,
+  });
+  const [isLoadingScoring, setIsLoadingScoring] = useState(true);
+  const [isSavingScoring, setIsSavingScoring] = useState(false);
+  const [scoringMessage, setScoringMessage] = useState<string | null>(null);
+
+  const fetchScoringSettings = useCallback(async () => {
+    try {
+      const res = await fetch("/api/settings/review");
+      if (res.ok) {
+        const data = await res.json();
+        setScoringSettings({
+          auto_approve_threshold: data.auto_approve_threshold ?? 70,
+          auto_skip_threshold: data.auto_skip_threshold ?? 30,
+          scoring_enabled: data.scoring_enabled ?? true,
+        });
+      }
+    } catch {
+      // 設定取得失敗は無視（デフォルト値を使用）
+    } finally {
+      setIsLoadingScoring(false);
+    }
+  }, []);
+
+  const handleSaveScoring = async () => {
+    setIsSavingScoring(true);
+    setScoringMessage(null);
+    try {
+      const res = await fetch("/api/settings/review", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(scoringSettings),
+      });
+      if (res.ok) {
+        setScoringMessage("設定を保存しました");
+        setTimeout(() => setScoringMessage(null), 3000);
+      } else {
+        setScoringMessage("設定の保存に失敗しました");
+      }
+    } catch {
+      setScoringMessage("設定の保存に失敗しました");
+    } finally {
+      setIsSavingScoring(false);
+    }
+  };
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -43,7 +99,8 @@ export default function SettingsPage() {
 
   useEffect(() => {
     fetchLogs();
-  }, [fetchLogs]);
+    fetchScoringSettings();
+  }, [fetchLogs, fetchScoringSettings]);
 
   // 手動収集実行
   const handleCollect = async () => {
@@ -74,6 +131,139 @@ export default function SettingsPage() {
       <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
         設定
       </h1>
+
+      {/* AIスコアリング設定 */}
+      <section className="rounded-lg border border-gray-200 p-5 dark:border-gray-700">
+        <h2 className="mb-3 text-lg font-semibold text-gray-900 dark:text-white">
+          AIスコアリング設定
+        </h2>
+        <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+          RSS収集時にAIが論文の関連度をスコアリングし、自動で承認/スキップします。
+        </p>
+
+        {isLoadingScoring ? (
+          <div className="h-32 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+        ) : (
+          <div className="space-y-5">
+            {/* 有効/無効トグル */}
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                スコアリング
+              </span>
+              <button
+                onClick={() =>
+                  setScoringSettings((prev) => ({
+                    ...prev,
+                    scoring_enabled: !prev.scoring_enabled,
+                  }))
+                }
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  scoringSettings.scoring_enabled
+                    ? "bg-blue-600"
+                    : "bg-gray-300 dark:bg-gray-600"
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    scoringSettings.scoring_enabled
+                      ? "translate-x-6"
+                      : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* 自動承認しきい値 */}
+            <div>
+              <div className="mb-1 flex items-center justify-between">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  自動承認しきい値
+                </label>
+                <span className="text-sm font-bold text-green-600 dark:text-green-400">
+                  {scoringSettings.auto_approve_threshold}
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={scoringSettings.auto_approve_threshold}
+                onChange={(e) =>
+                  setScoringSettings((prev) => ({
+                    ...prev,
+                    auto_approve_threshold: parseInt(e.target.value),
+                  }))
+                }
+                className="w-full accent-green-600"
+              />
+              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                このスコア以上の論文を自動承認します
+              </p>
+            </div>
+
+            {/* 自動スキップしきい値 */}
+            <div>
+              <div className="mb-1 flex items-center justify-between">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  自動スキップしきい値
+                </label>
+                <span className="text-sm font-bold text-red-600 dark:text-red-400">
+                  {scoringSettings.auto_skip_threshold}
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={scoringSettings.auto_skip_threshold}
+                onChange={(e) =>
+                  setScoringSettings((prev) => ({
+                    ...prev,
+                    auto_skip_threshold: parseInt(e.target.value),
+                  }))
+                }
+                className="w-full accent-red-600"
+              />
+              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                このスコア以下の論文を自動スキップします
+              </p>
+            </div>
+
+            {/* 説明テキスト */}
+            <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800">
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                スコア {scoringSettings.auto_approve_threshold} 以上 → 自動承認（論文一覧に表示）
+                <br />
+                スコア {scoringSettings.auto_skip_threshold + 1}〜{scoringSettings.auto_approve_threshold - 1} → 手動レビュー対象
+                <br />
+                スコア {scoringSettings.auto_skip_threshold} 以下 → 自動スキップ
+              </p>
+            </div>
+
+            {/* 保存ボタン */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleSaveScoring}
+                disabled={isSavingScoring}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {isSavingScoring ? "保存中..." : "設定を保存"}
+              </button>
+              {scoringMessage && (
+                <span
+                  className={`text-sm ${
+                    scoringMessage.includes("失敗")
+                      ? "text-red-600 dark:text-red-400"
+                      : "text-green-600 dark:text-green-400"
+                  }`}
+                >
+                  {scoringMessage}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
 
       {/* 手動収集セクション */}
       <section className="rounded-lg border border-gray-200 p-5 dark:border-gray-700">

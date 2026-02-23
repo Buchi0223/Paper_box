@@ -26,6 +26,16 @@ export type Database = {
         Insert: RssFeedInsert;
         Update: RssFeedUpdate;
       };
+      interests: {
+        Row: Interest;
+        Insert: InterestInsert;
+        Update: Partial<InterestInsert>;
+      };
+      review_settings: {
+        Row: ReviewSetting;
+        Insert: ReviewSettingInsert;
+        Update: Partial<ReviewSettingInsert>;
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -48,6 +58,8 @@ export type Paper = {
   google_drive_url: string | null;
   is_favorite: boolean;
   memo: string | null;
+  review_status: string;
+  relevance_score: number | null;
   collected_at: string;
   created_at: string;
   updated_at: string;
@@ -68,6 +80,8 @@ export type PaperInsert = {
   google_drive_url?: string | null;
   is_favorite?: boolean;
   memo?: string | null;
+  review_status?: string;
+  relevance_score?: number | null;
   collected_at?: string;
   created_at?: string;
   updated_at?: string;
@@ -88,6 +102,8 @@ export type PaperUpdate = {
   google_drive_url?: string | null;
   is_favorite?: boolean;
   memo?: string | null;
+  review_status?: string;
+  relevance_score?: number | null;
   collected_at?: string;
   created_at?: string;
   updated_at?: string;
@@ -173,4 +189,34 @@ export type RssFeedUpdate = {
   is_active?: boolean;
   last_fetched_at?: string | null;
   created_at?: string;
+};
+
+export type Interest = {
+  id: string;
+  label: string;
+  type: string;
+  weight: number;
+  created_at: string;
+};
+
+export type InterestInsert = {
+  id?: string;
+  label: string;
+  type?: string;
+  weight?: number;
+  created_at?: string;
+};
+
+export type ReviewSetting = {
+  id: string;
+  key: string;
+  value: string;
+  updated_at: string;
+};
+
+export type ReviewSettingInsert = {
+  id?: string;
+  key: string;
+  value: string;
+  updated_at?: string;
 };

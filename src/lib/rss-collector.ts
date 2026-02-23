@@ -2,6 +2,12 @@
 import { supabase } from "@/lib/supabase";
 import { fetchAndParseFeed, type RssEntry } from "@/lib/rss";
 import { translateTitle } from "@/lib/ai";
+import {
+  scoreRelevance,
+  determineReviewStatus,
+  getReviewSettings,
+  type ReviewSettings,
+} from "@/lib/scoring";
 
 type RssFeed = {
   id: string;
@@ -32,10 +38,20 @@ export async function collectAllRssFeeds(): Promise<RssCollectResult[]> {
     return [];
   }
 
+  // スコアリング設定と関心プロファイルを事前に取得
+  const settings = await getReviewSettings();
+  let interests: { label: string; weight: number }[] = [];
+  if (settings.scoring_enabled) {
+    const { data: interestData } = await supabase
+      .from("interests")
+      .select("label, weight");
+    interests = interestData || [];
+  }
+
   const results: RssCollectResult[] = [];
 
   for (const feed of feeds as RssFeed[]) {
-    const result = await collectForFeed(feed);
+    const result = await collectForFeed(feed, settings, interests);
     results.push(result);
   }
 
@@ -45,7 +61,11 @@ export async function collectAllRssFeeds(): Promise<RssCollectResult[]> {
 /**
  * 特定のRSSフィードに対して論文収集を実行する
  */
-async function collectForFeed(feed: RssFeed): Promise<RssCollectResult> {
+async function collectForFeed(
+  feed: RssFeed,
+  settings: ReviewSettings,
+  interests: { label: string; weight: number }[],
+): Promise<RssCollectResult> {
   try {
     // フィードを取得・パース
     const entries = await fetchAndParseFeed(feed.feed_url, feed.last_fetched_at);
@@ -91,6 +111,26 @@ async function collectForFeed(feed: RssFeed): Promise<RssCollectResult> {
           console.error(`Title translation failed for "${entry.title}":`, e);
         }
 
+        // AIスコアリング
+        let relevanceScore: number | null = null;
+        let reviewStatus = "pending";
+
+        if (settings.scoring_enabled && interests.length > 0) {
+          try {
+            relevanceScore = await scoreRelevance(
+              {
+                title_original: entry.title,
+                title_ja: titleJa,
+                authors: entry.authors,
+              },
+              interests,
+            );
+            reviewStatus = determineReviewStatus(relevanceScore, settings);
+          } catch (e) {
+            console.error(`Scoring failed for "${entry.title}":`, e);
+          }
+        }
+
         // DBに保存
         const { error: insertError } = await supabase.from("papers").insert({
           title_original: entry.title,
@@ -100,6 +140,8 @@ async function collectForFeed(feed: RssFeed): Promise<RssCollectResult> {
           doi: entry.doi || null,
           url: entry.url,
           source: "rss",
+          review_status: reviewStatus,
+          relevance_score: relevanceScore,
         });
 
         if (!insertError) {
