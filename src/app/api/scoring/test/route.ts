@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
+import { GoogleGenAI } from "@google/genai";
 import { supabase } from "@/lib/supabase";
-import { scoreRelevance, getReviewSettings } from "@/lib/scoring";
+import { getReviewSettings } from "@/lib/scoring";
+
+const MODEL = "gemini-2.5-flash";
 
 /**
- * GET /api/scoring/test — スコアリング動作診断
- * 実際の関心プロファイルとサンプル論文でスコアリングをテストする
+ * GET /api/scoring/test — スコアリング詳細診断
+ * Gemini APIの生レスポンスを直接確認する
  */
 export async function GET() {
   const diagnostics: Record<string, unknown> = {};
@@ -24,51 +27,113 @@ export async function GET() {
   const settings = await getReviewSettings();
   diagnostics.settings = settings;
 
-  // 3. 実際にスコアリングを実行（テスト用の論文）
-  if (interests && interests.length > 0) {
-    const testPapers = [
-      {
-        title_original:
-          "Deep Learning for Natural Language Processing: A Comprehensive Survey",
-        title_ja: "自然言語処理のための深層学習：包括的サーベイ",
-        authors: ["Test Author"],
-        abstract:
-          "This paper provides a comprehensive survey of deep learning techniques applied to natural language processing tasks.",
-      },
-      {
-        title_original:
-          "A Novel Approach to Quantum Computing Error Correction",
-        title_ja: "量子コンピューティングエラー訂正への新しいアプローチ",
-        authors: ["Test Author"],
-        abstract:
-          "We propose a novel error correction method for quantum computing systems using topological codes.",
-      },
-    ];
+  // 3. Gemini API 直接テスト（JSON mode と non-JSON mode の比較）
+  if (!process.env.GEMINI_API_KEY) {
+    diagnostics.api_test = "ERROR: GEMINI_API_KEY is not set";
+    return NextResponse.json(diagnostics);
+  }
 
-    const scoringResults = [];
-    for (const paper of testPapers) {
-      try {
-        const startTime = Date.now();
-        const score = await scoreRelevance(paper, interests);
-        const elapsed = Date.now() - startTime;
-        scoringResults.push({
-          title: paper.title_original.slice(0, 60),
-          score,
-          elapsed_ms: elapsed,
-          status: "success",
-        });
-      } catch (e) {
-        scoringResults.push({
-          title: paper.title_original.slice(0, 60),
-          score: null,
-          error: e instanceof Error ? e.message : String(e),
-          status: "error",
-        });
-      }
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+  // 関心プロファイルを構築（上位10件のみ使用）
+  const topInterests = (interests || []).slice(0, 10);
+  const interestsList = topInterests
+    .map((i) => `- ${i.label}（重み: ${i.weight}）`)
+    .join("\n");
+
+  const SCORING_PROMPT = `あなたは研究者の関心度を判定する専門家です。
+
+以下の「関心プロファイル」と「論文情報」を照合し、
+研究者がこの論文に興味を持つ可能性を0〜100の整数で評価してください。
+
+## 評価基準
+- 90-100: 研究テーマに直接関連する
+- 70-89: 関連性が高い
+- 40-69: 間接的に関連する可能性がある
+- 10-39: 関連性が低い
+- 0-9: 全く無関係
+
+## 出力形式（JSONのみ出力してください）
+{
+  "reasoning": "2-3文の評価理由",
+  "matched_interests": ["マッチした関心キーワード"],
+  "score": 数値
+}`;
+
+  const testPaper = `## 関心プロファイル
+${interestsList}
+
+## 論文情報
+タイトル: Deep Learning for Natural Language Processing: A Comprehensive Survey
+アブストラクト: This paper provides a comprehensive survey of deep learning techniques applied to natural language processing tasks including sentiment analysis, machine translation, and text generation.`;
+
+  // テスト A: responseMimeType: "application/json" あり
+  try {
+    const startA = Date.now();
+    const responseA = await ai.models.generateContent({
+      model: MODEL,
+      contents: testPaper,
+      config: {
+        systemInstruction: SCORING_PROMPT,
+        temperature: 0.1,
+        maxOutputTokens: 300,
+        responseMimeType: "application/json",
+      },
+    });
+    const elapsedA = Date.now() - startA;
+    const textA = responseA.text?.trim() || "";
+
+    let parsedA = null;
+    try {
+      parsedA = JSON.parse(textA);
+    } catch {
+      parsedA = "JSON_PARSE_FAILED";
     }
-    diagnostics.scoring_test = scoringResults;
-  } else {
-    diagnostics.scoring_test = "SKIPPED: No interests found in database";
+
+    diagnostics.test_with_json_mode = {
+      raw_text: textA.slice(0, 500),
+      raw_text_length: textA.length,
+      parsed: parsedA,
+      elapsed_ms: elapsedA,
+    };
+  } catch (e) {
+    diagnostics.test_with_json_mode = {
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+
+  // テスト B: responseMimeType なし（プレーンテキスト）
+  try {
+    const startB = Date.now();
+    const responseB = await ai.models.generateContent({
+      model: MODEL,
+      contents: testPaper,
+      config: {
+        systemInstruction: SCORING_PROMPT,
+        temperature: 0.1,
+        maxOutputTokens: 300,
+      },
+    });
+    const elapsedB = Date.now() - startB;
+    const textB = responseB.text?.trim() || "";
+
+    let parsedB = null;
+    try {
+      parsedB = JSON.parse(textB);
+    } catch {
+      parsedB = "JSON_PARSE_FAILED";
+    }
+
+    diagnostics.test_without_json_mode = {
+      raw_text: textB.slice(0, 500),
+      raw_text_length: textB.length,
+      parsed: parsedB,
+      elapsed_ms: elapsedB,
+    };
+  } catch (e) {
+    diagnostics.test_without_json_mode = {
+      error: e instanceof Error ? e.message : String(e),
+    };
   }
 
   // 4. 既存論文のスコア分布を確認
