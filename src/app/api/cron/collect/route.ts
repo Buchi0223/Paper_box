@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { collectAllPapers } from "@/lib/collector";
+import { collectAllRssFeeds } from "@/lib/rss-collector";
 
 // Cron Job用の収集API（CRON_SECRETで認証）
 export async function POST(request: NextRequest) {
@@ -14,15 +15,23 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const results = await collectAllPapers();
+    // キーワード収集
+    const keywordResults = await collectAllPapers();
+    const keywordTotal = keywordResults.reduce((sum, r) => sum + r.papers_found, 0);
 
-    const totalFound = results.reduce((sum, r) => sum + r.papers_found, 0);
+    // RSS収集
+    const rssResults = await collectAllRssFeeds();
+    const rssTotal = rssResults.reduce((sum, r) => sum + r.papers_found, 0);
 
     return NextResponse.json({
       ok: true,
-      keywords_processed: results.length,
-      total_papers_found: totalFound,
-      results,
+      keywords_processed: keywordResults.length,
+      keyword_papers_found: keywordTotal,
+      feeds_processed: rssResults.length,
+      rss_papers_found: rssTotal,
+      total_papers_found: keywordTotal + rssTotal,
+      keyword_results: keywordResults,
+      rss_results: rssResults,
     });
   } catch (error) {
     const message =

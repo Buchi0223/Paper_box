@@ -21,6 +21,11 @@ export type Database = {
         Insert: CollectionLogInsert;
         Update: Partial<CollectionLogInsert>;
       };
+      rss_feeds: {
+        Row: RssFeed;
+        Insert: RssFeedInsert;
+        Update: RssFeedUpdate;
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -125,7 +130,8 @@ export type PaperKeyword = {
 
 export type CollectionLog = {
   id: string;
-  keyword_id: string;
+  keyword_id: string | null;
+  feed_id: string | null;
   status: string;
   papers_found: number;
   message: string | null;
@@ -134,9 +140,37 @@ export type CollectionLog = {
 
 export type CollectionLogInsert = {
   id?: string;
-  keyword_id: string;
+  keyword_id?: string | null;
+  feed_id?: string | null;
   status?: string;
   papers_found?: number;
   message?: string | null;
   executed_at?: string;
+};
+
+export type RssFeed = {
+  id: string;
+  name: string;
+  feed_url: string;
+  is_active: boolean;
+  last_fetched_at: string | null;
+  created_at: string;
+};
+
+export type RssFeedInsert = {
+  id?: string;
+  name: string;
+  feed_url: string;
+  is_active?: boolean;
+  last_fetched_at?: string | null;
+  created_at?: string;
+};
+
+export type RssFeedUpdate = {
+  id?: string;
+  name?: string;
+  feed_url?: string;
+  is_active?: boolean;
+  last_fetched_at?: string | null;
+  created_at?: string;
 };

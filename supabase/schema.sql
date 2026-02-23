@@ -42,10 +42,21 @@ CREATE TABLE paper_keywords (
   PRIMARY KEY (paper_id, keyword_id)
 );
 
+-- RSSフィードテーブル
+CREATE TABLE rss_feeds (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name TEXT NOT NULL,
+  feed_url TEXT NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  last_fetched_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- 収集ログテーブル
 CREATE TABLE collection_logs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  keyword_id UUID NOT NULL REFERENCES keywords(id) ON DELETE CASCADE,
+  keyword_id UUID REFERENCES keywords(id) ON DELETE CASCADE,
+  feed_id UUID REFERENCES rss_feeds(id) ON DELETE SET NULL,
   status TEXT NOT NULL DEFAULT 'success',
   papers_found INTEGER NOT NULL DEFAULT 0,
   message TEXT,
@@ -58,6 +69,7 @@ CREATE INDEX idx_papers_is_favorite ON papers(is_favorite) WHERE is_favorite = T
 CREATE INDEX idx_papers_doi ON papers(doi) WHERE doi IS NOT NULL;
 CREATE INDEX idx_papers_source ON papers(source);
 CREATE INDEX idx_keywords_is_active ON keywords(is_active) WHERE is_active = TRUE;
+CREATE INDEX idx_rss_feeds_is_active ON rss_feeds(is_active) WHERE is_active = TRUE;
 CREATE INDEX idx_collection_logs_executed_at ON collection_logs(executed_at DESC);
 
 -- updated_at を自動更新するトリガー

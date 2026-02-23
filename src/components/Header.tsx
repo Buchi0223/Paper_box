@@ -9,6 +9,7 @@ const navItems = [
   { href: "/", label: "論文一覧" },
   { href: "/papers/new", label: "論文登録" },
   { href: "/keywords", label: "キーワード" },
+  { href: "/feeds", label: "RSS" },
   { href: "/favorites", label: "お気に入り" },
   { href: "/settings", label: "設定" },
 ];
