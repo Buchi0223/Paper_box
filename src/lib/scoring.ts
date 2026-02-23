@@ -121,8 +121,9 @@ export async function scoreRelevance(
       config: {
         systemInstruction: SCORING_PROMPT,
         temperature: 0.1,
-        maxOutputTokens: 300,
+        maxOutputTokens: 1024,
         responseMimeType: "application/json",
+        thinkingConfig: { thinkingBudget: 0 },
       },
     });
 

@@ -67,7 +67,7 @@ ${interestsList}
 タイトル: Deep Learning for Natural Language Processing: A Comprehensive Survey
 アブストラクト: This paper provides a comprehensive survey of deep learning techniques applied to natural language processing tasks including sentiment analysis, machine translation, and text generation.`;
 
-  // テスト A: responseMimeType: "application/json" あり
+  // テスト A: thinking無効 + JSON mode（修正版設定）
   try {
     const startA = Date.now();
     const responseA = await ai.models.generateContent({
@@ -76,8 +76,9 @@ ${interestsList}
       config: {
         systemInstruction: SCORING_PROMPT,
         temperature: 0.1,
-        maxOutputTokens: 300,
+        maxOutputTokens: 1024,
         responseMimeType: "application/json",
+        thinkingConfig: { thinkingBudget: 0 },
       },
     });
     const elapsedA = Date.now() - startA;
@@ -90,19 +91,19 @@ ${interestsList}
       parsedA = "JSON_PARSE_FAILED";
     }
 
-    diagnostics.test_with_json_mode = {
+    diagnostics.test_fixed_config = {
       raw_text: textA.slice(0, 500),
       raw_text_length: textA.length,
       parsed: parsedA,
       elapsed_ms: elapsedA,
     };
   } catch (e) {
-    diagnostics.test_with_json_mode = {
+    diagnostics.test_fixed_config = {
       error: e instanceof Error ? e.message : String(e),
     };
   }
 
-  // テスト B: responseMimeType なし（プレーンテキスト）
+  // テスト B: thinking有効のまま（旧設定 — 問題の再現用）
   try {
     const startB = Date.now();
     const responseB = await ai.models.generateContent({
@@ -112,6 +113,7 @@ ${interestsList}
         systemInstruction: SCORING_PROMPT,
         temperature: 0.1,
         maxOutputTokens: 300,
+        responseMimeType: "application/json",
       },
     });
     const elapsedB = Date.now() - startB;
@@ -124,14 +126,14 @@ ${interestsList}
       parsedB = "JSON_PARSE_FAILED";
     }
 
-    diagnostics.test_without_json_mode = {
+    diagnostics.test_old_config = {
       raw_text: textB.slice(0, 500),
       raw_text_length: textB.length,
       parsed: parsedB,
       elapsed_ms: elapsedB,
     };
   } catch (e) {
-    diagnostics.test_without_json_mode = {
+    diagnostics.test_old_config = {
       error: e instanceof Error ? e.message : String(e),
     };
   }
