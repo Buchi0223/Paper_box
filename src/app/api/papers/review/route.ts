@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { learnFromApproval, learnFromSkip } from "@/lib/interest-learner";
+import { trackScoringAccuracy } from "@/lib/scoring";
 
 /**
  * GET /api/papers/review — 未レビュー論文を取得
@@ -77,6 +78,13 @@ export async function POST(request: NextRequest) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // スコアリング精度のトラッキング
+  try {
+    await trackScoringAccuracy(data.id, data.relevance_score, action);
+  } catch (e) {
+    console.error("Scoring tracking error:", e);
   }
 
   // 関心プロファイルの自動学習（バックグラウンド、レスポンスをブロックしない）

@@ -127,6 +127,7 @@ async function collectForKeyword(kw: Keyword): Promise<CollectResult> {
           title_original: paper.title,
           title_ja: aiResult.title_ja || null,
           authors: paper.authors,
+          abstract: paper.abstract || null,
           published_date: paper.published_date || null,
           journal: paper.venue || null,
           doi: paper.doi || null,

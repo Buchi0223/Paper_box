@@ -20,14 +20,25 @@ const SCORING_PROMPT = `あなたは研究者の関心度を判定する専門�
 以下の「関心プロファイル」と「論文情報」を照合し、
 研究者がこの論文に興味を持つ可能性を0〜100の整数で評価してください。
 
+## 評価手順（必ずこの順序で考えてください）
+1. 論文の主要研究テーマ・手法を特定する
+2. 各関心キーワードとの関連性を個別に評価する（重みを考慮）
+3. 直接的関連（キーワードが論文の中心テーマ）と間接的関連（周辺分野）を区別する
+4. 総合スコアを決定する
+
 ## 評価基準
-- 90-100: 研究テーマに直接関連する
-- 70-89: 関連性が高い、手法や分野が近い
-- 40-69: 間接的に関連する可能性がある
-- 10-39: 関連性が低い
+- 90-100: 研究テーマに直接関連する（キーワードが論文の中心テーマ）
+- 70-89: 関連性が高い（手法・分野が共通、応用先が近い）
+- 40-69: 間接的に関連する可能性がある（関連分野だが直接的ではない）
+- 10-39: 関連性が低い（ごく一部が関連）
 - 0-9: 全く無関係
 
-スコア（数値のみ）を出力してください。`;
+## 出力形式（JSONのみ出力してください）
+{
+  "reasoning": "2-3文の評価理由",
+  "matched_interests": ["マッチした関心キーワード"],
+  "score": 数値
+}`;
 
 export type ReviewSettings = {
   auto_approve_threshold: number;
@@ -79,6 +90,7 @@ export async function scoreRelevance(
     title_original: string;
     title_ja?: string | null;
     authors?: string[];
+    abstract?: string | null;
     summary_ja?: string | null;
   },
   interests: { label: string; weight: number }[],
@@ -96,6 +108,7 @@ export async function scoreRelevance(
   const paperParts = [`タイトル: ${paper.title_original}`];
   if (paper.title_ja) paperParts.push(`日本語タイトル: ${paper.title_ja}`);
   if (paper.authors?.length) paperParts.push(`著者: ${paper.authors.join(", ")}`);
+  if (paper.abstract) paperParts.push(`アブストラクト: ${paper.abstract.slice(0, 500)}`);
   if (paper.summary_ja) paperParts.push(`要約: ${paper.summary_ja}`);
 
   const contents = `## 関心プロファイル\n${interestsList}\n\n## 論文情報\n${paperParts.join("\n")}`;
@@ -106,19 +119,30 @@ export async function scoreRelevance(
     config: {
       systemInstruction: SCORING_PROMPT,
       temperature: 0.1,
-      maxOutputTokens: 10,
-      thinkingConfig: { thinkingBudget: 0 },
+      maxOutputTokens: 300,
+      responseMimeType: "application/json",
+      thinkingConfig: { thinkingBudget: 1024 },
     },
   });
 
   const text = response.text?.trim() || "";
-  const score = parseInt(text);
 
-  if (isNaN(score) || score < 0 || score > 100) {
-    return 50; // パース失敗時はデフォルト
+  // JSON出力をパース
+  try {
+    const result = JSON.parse(text);
+    const score = typeof result.score === "number" ? result.score : parseInt(result.score);
+    if (isNaN(score) || score < 0 || score > 100) {
+      return 50;
+    }
+    return score;
+  } catch {
+    // JSONパース失敗時：数値のみの出力にも対応（フォールバック）
+    const score = parseInt(text);
+    if (isNaN(score) || score < 0 || score > 100) {
+      return 50;
+    }
+    return score;
   }
-
-  return score;
 }
 
 /**
@@ -135,4 +159,33 @@ export function determineReviewStatus(
     return "auto_skipped";
   }
   return "pending";
+}
+
+/**
+ * スコアリング精度を記録する（レビュー実行時に呼び出す）
+ */
+export async function trackScoringAccuracy(
+  paperId: string,
+  aiScore: number | null,
+  userAction: "approve" | "skip",
+): Promise<void> {
+  if (aiScore === null) return;
+
+  const settings = await getReviewSettings();
+  const expectedAction =
+    aiScore >= settings.auto_approve_threshold
+      ? "approve"
+      : aiScore <= settings.auto_skip_threshold
+        ? "skip"
+        : "uncertain";
+  const isCorrect =
+    expectedAction === userAction || expectedAction === "uncertain";
+
+  await supabase.from("scoring_feedback").insert({
+    paper_id: paperId,
+    ai_score: aiScore,
+    user_action: userAction,
+    scoring_method: "v2",
+    is_correct: isCorrect,
+  });
 }

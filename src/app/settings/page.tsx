@@ -25,6 +25,15 @@ type ScoringSettings = {
   auto_collect_enabled: boolean;
 };
 
+type ScoringMetrics = {
+  total_reviews: number;
+  score_gap: number | null;
+  accuracy: number | null;
+  precision_at_10: number | null;
+  avg_approved_score: number | null;
+  avg_skipped_score: number | null;
+};
+
 export default function SettingsPage() {
   const [logs, setLogs] = useState<CollectionLog[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(true);
@@ -44,6 +53,9 @@ export default function SettingsPage() {
   const [isLoadingScoring, setIsLoadingScoring] = useState(true);
   const [isSavingScoring, setIsSavingScoring] = useState(false);
   const [scoringMessage, setScoringMessage] = useState<string | null>(null);
+
+  // スコアリング精度メトリクス
+  const [metrics, setMetrics] = useState<ScoringMetrics | null>(null);
 
   const fetchScoringSettings = useCallback(async () => {
     try {
@@ -100,10 +112,22 @@ export default function SettingsPage() {
     }
   }, []);
 
+  const fetchMetrics = useCallback(async () => {
+    try {
+      const res = await fetch("/api/settings/review/metrics");
+      if (res.ok) {
+        setMetrics(await res.json());
+      }
+    } catch {
+      // メトリクス取得失敗は無視
+    }
+  }, []);
+
   useEffect(() => {
     fetchLogs();
     fetchScoringSettings();
-  }, [fetchLogs, fetchScoringSettings]);
+    fetchMetrics();
+  }, [fetchLogs, fetchScoringSettings, fetchMetrics]);
 
   // 手動収集実行
   const handleCollect = async () => {
@@ -267,6 +291,87 @@ export default function SettingsPage() {
           </div>
         )}
       </section>
+
+      {/* スコアリング精度 */}
+      {metrics && metrics.total_reviews > 0 && (
+        <section className="rounded-lg border border-gray-200 p-5 dark:border-gray-700">
+          <h2 className="mb-3 text-lg font-semibold text-gray-900 dark:text-white">
+            スコアリング精度
+          </h2>
+          <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+            手動レビュー {metrics.total_reviews} 件のフィードバックに基づく精度指標
+          </p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                scoreGap
+              </p>
+              <p className={`text-xl font-bold ${
+                metrics.score_gap !== null && metrics.score_gap >= 30
+                  ? "text-green-600 dark:text-green-400"
+                  : metrics.score_gap !== null && metrics.score_gap >= 15
+                    ? "text-yellow-600 dark:text-yellow-400"
+                    : "text-red-600 dark:text-red-400"
+              }`}>
+                {metrics.score_gap ?? "—"}
+              </p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                目標: 30以上
+              </p>
+            </div>
+            <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                正解率
+              </p>
+              <p className={`text-xl font-bold ${
+                metrics.accuracy !== null && metrics.accuracy >= 85
+                  ? "text-green-600 dark:text-green-400"
+                  : metrics.accuracy !== null && metrics.accuracy >= 70
+                    ? "text-yellow-600 dark:text-yellow-400"
+                    : "text-red-600 dark:text-red-400"
+              }`}>
+                {metrics.accuracy !== null ? `${metrics.accuracy}%` : "—"}
+              </p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                目標: 85%以上
+              </p>
+            </div>
+            <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Precision@10
+              </p>
+              <p className={`text-xl font-bold ${
+                metrics.precision_at_10 !== null && metrics.precision_at_10 >= 80
+                  ? "text-green-600 dark:text-green-400"
+                  : metrics.precision_at_10 !== null && metrics.precision_at_10 >= 60
+                    ? "text-yellow-600 dark:text-yellow-400"
+                    : "text-red-600 dark:text-red-400"
+              }`}>
+                {metrics.precision_at_10 !== null
+                  ? `${metrics.precision_at_10}%`
+                  : "—"}
+              </p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                目標: 80%以上
+              </p>
+            </div>
+            <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                平均スコア
+              </p>
+              <div className="flex items-baseline gap-2">
+                <span className="text-sm font-bold text-green-600 dark:text-green-400">
+                  承認{metrics.avg_approved_score ?? "—"}
+                </span>
+                <span className="text-xs text-gray-400">/</span>
+                <span className="text-sm font-bold text-red-600 dark:text-red-400">
+                  棄却{metrics.avg_skipped_score ?? "—"}
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* 手動収集セクション */}
       <section className="rounded-lg border border-gray-200 p-5 dark:border-gray-700">

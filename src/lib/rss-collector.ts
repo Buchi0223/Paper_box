@@ -122,6 +122,7 @@ async function collectForFeed(
                 title_original: entry.title,
                 title_ja: titleJa,
                 authors: entry.authors,
+                abstract: entry.abstract,
               },
               interests,
             );
@@ -136,6 +137,7 @@ async function collectForFeed(
           title_original: entry.title,
           title_ja: titleJa,
           authors: entry.authors,
+          abstract: entry.abstract || null,
           published_date: entry.published_date || null,
           doi: entry.doi || null,
           url: entry.url,

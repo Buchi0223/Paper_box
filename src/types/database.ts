@@ -48,6 +48,7 @@ export type Paper = {
   title_original: string;
   title_ja: string | null;
   authors: string[];
+  abstract: string | null;
   published_date: string | null;
   journal: string | null;
   doi: string | null;
@@ -70,6 +71,7 @@ export type PaperInsert = {
   title_original: string;
   title_ja?: string | null;
   authors?: string[];
+  abstract?: string | null;
   published_date?: string | null;
   journal?: string | null;
   doi?: string | null;
@@ -92,6 +94,7 @@ export type PaperUpdate = {
   title_original?: string;
   title_ja?: string | null;
   authors?: string[];
+  abstract?: string | null;
   published_date?: string | null;
   journal?: string | null;
   doi?: string | null;
@@ -219,4 +222,24 @@ export type ReviewSettingInsert = {
   key: string;
   value: string;
   updated_at?: string;
+};
+
+export type ScoringFeedback = {
+  id: string;
+  paper_id: string;
+  ai_score: number;
+  user_action: string;
+  scoring_method: string;
+  is_correct: boolean;
+  created_at: string;
+};
+
+export type ScoringFeedbackInsert = {
+  id?: string;
+  paper_id: string;
+  ai_score: number;
+  user_action: string;
+  scoring_method?: string;
+  is_correct?: boolean;
+  created_at?: string;
 };
