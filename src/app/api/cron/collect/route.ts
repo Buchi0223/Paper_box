@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { collectAllPapers } from "@/lib/collector";
 import { collectAllRssFeeds } from "@/lib/rss-collector";
+import { getReviewSettings } from "@/lib/scoring";
 
 // Cron Job用の収集API（CRON_SECRETで認証）
 export async function POST(request: NextRequest) {
@@ -15,6 +16,16 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // 自動収集が無効の場合はスキップ
+    const settings = await getReviewSettings();
+    if (!settings.auto_collect_enabled) {
+      return NextResponse.json({
+        ok: true,
+        skipped: true,
+        message: "自動収集は無効に設定されています",
+      });
+    }
+
     // キーワード収集
     const keywordResults = await collectAllPapers();
     const keywordTotal = keywordResults.reduce((sum, r) => sum + r.papers_found, 0);

@@ -197,23 +197,44 @@ async function collectForFeed(
 }
 
 /**
- * DB内に既に存在する論文を除外する（DOIベース + タイトルベース）
+ * DB内に既に存在する論文を除外する（DOIベース + タイトル原題ベース）
  */
 async function filterExistingEntries(
   entries: RssEntry[],
 ): Promise<RssEntry[]> {
+  if (entries.length === 0) return entries;
+
+  // DOIベースの重複チェック
   const dois = entries.map((e) => e.doi).filter(Boolean) as string[];
+  const existingDois = new Set<string>();
 
-  if (dois.length === 0) return entries;
+  if (dois.length > 0) {
+    const { data: byDoi } = await supabase
+      .from("papers")
+      .select("doi")
+      .in("doi", dois);
+    for (const p of byDoi || []) {
+      existingDois.add(p.doi);
+    }
+  }
 
-  const { data: existing } = await supabase
-    .from("papers")
-    .select("doi")
-    .in("doi", dois);
+  // タイトル原題ベースの重複チェック
+  const titles = entries.map((e) => e.title);
+  const existingTitles = new Set<string>();
 
-  const existingDois = new Set(
-    (existing || []).map((p: { doi: string }) => p.doi),
+  if (titles.length > 0) {
+    const { data: byTitle } = await supabase
+      .from("papers")
+      .select("title_original")
+      .in("title_original", titles);
+    for (const p of byTitle || []) {
+      existingTitles.add(p.title_original);
+    }
+  }
+
+  return entries.filter(
+    (e) =>
+      (!e.doi || !existingDois.has(e.doi)) &&
+      !existingTitles.has(e.title),
   );
-
-  return entries.filter((e) => !e.doi || !existingDois.has(e.doi));
 }

@@ -22,6 +22,7 @@ type ScoringSettings = {
   auto_approve_threshold: number;
   auto_skip_threshold: number;
   scoring_enabled: boolean;
+  auto_collect_enabled: boolean;
 };
 
 export default function SettingsPage() {
@@ -38,6 +39,7 @@ export default function SettingsPage() {
     auto_approve_threshold: 70,
     auto_skip_threshold: 30,
     scoring_enabled: true,
+    auto_collect_enabled: true,
   });
   const [isLoadingScoring, setIsLoadingScoring] = useState(true);
   const [isSavingScoring, setIsSavingScoring] = useState(false);
@@ -52,6 +54,7 @@ export default function SettingsPage() {
           auto_approve_threshold: data.auto_approve_threshold ?? 70,
           auto_skip_threshold: data.auto_skip_threshold ?? 30,
           scoring_enabled: data.scoring_enabled ?? true,
+          auto_collect_enabled: data.auto_collect_enabled ?? true,
         });
       }
     } catch {
@@ -272,8 +275,49 @@ export default function SettingsPage() {
         </h2>
         <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
           登録済みのキーワードで論文を検索し、AI処理後にデータベースに保存します。
-          Vercel Cron Jobにより毎日6:00（UTC）に自動実行されます。
         </p>
+
+        {/* 自動収集 ON/OFF */}
+        <div className="mb-4 flex items-center justify-between rounded-lg bg-gray-50 p-3 dark:bg-gray-800">
+          <div>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Cron自動収集
+            </span>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {scoringSettings.auto_collect_enabled
+                ? "毎日 6:00 UTC に自動実行されます"
+                : "自動収集は停止中です（手動実行は可能）"}
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              const next = !scoringSettings.auto_collect_enabled;
+              setScoringSettings((prev) => ({
+                ...prev,
+                auto_collect_enabled: next,
+              }));
+              // 即座に保存
+              fetch("/api/settings/review", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ auto_collect_enabled: next }),
+              });
+            }}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+              scoringSettings.auto_collect_enabled
+                ? "bg-blue-600"
+                : "bg-gray-300 dark:bg-gray-600"
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                scoringSettings.auto_collect_enabled
+                  ? "translate-x-6"
+                  : "translate-x-1"
+              }`}
+            />
+          </button>
+        </div>
 
         {error && (
           <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">

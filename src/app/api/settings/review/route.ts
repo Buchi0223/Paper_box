@@ -21,6 +21,7 @@ export async function GET() {
         settings[row.key] = parseInt(row.value) || 0;
         break;
       case "scoring_enabled":
+      case "auto_collect_enabled":
         settings[row.key] = row.value === "true";
         break;
       default:
@@ -41,6 +42,7 @@ export async function PATCH(request: NextRequest) {
     "auto_approve_threshold",
     "auto_skip_threshold",
     "scoring_enabled",
+    "auto_collect_enabled",
   ];
 
   const updates: { key: string; value: string }[] = [];
@@ -82,6 +84,7 @@ export async function PATCH(request: NextRequest) {
         settings[row.key] = parseInt(row.value) || 0;
         break;
       case "scoring_enabled":
+      case "auto_collect_enabled":
         settings[row.key] = row.value === "true";
         break;
       default:

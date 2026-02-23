@@ -268,21 +268,44 @@ function deduplicatePapers(papers: NormalizedPaper[]): NormalizedPaper[] {
 }
 
 /**
- * DB内に既に存在する論文を除外する
+ * DB内に既に存在する論文を除外する（DOIベース + タイトル原題ベース）
  */
 async function filterExisting(
   papers: NormalizedPaper[],
 ): Promise<NormalizedPaper[]> {
+  if (papers.length === 0) return papers;
+
+  // DOIベースの重複チェック
   const dois = papers.map((p) => p.doi).filter(Boolean) as string[];
+  const existingDois = new Set<string>();
 
-  if (dois.length === 0) return papers;
+  if (dois.length > 0) {
+    const { data: byDoi } = await supabase
+      .from("papers")
+      .select("doi")
+      .in("doi", dois);
+    for (const p of byDoi || []) {
+      existingDois.add(p.doi);
+    }
+  }
 
-  const { data: existing } = await supabase
-    .from("papers")
-    .select("doi")
-    .in("doi", dois);
+  // タイトル原題ベースの重複チェック
+  const titles = papers.map((p) => p.title);
+  const existingTitles = new Set<string>();
 
-  const existingDois = new Set((existing || []).map((p: { doi: string }) => p.doi));
+  if (titles.length > 0) {
+    const { data: byTitle } = await supabase
+      .from("papers")
+      .select("title_original")
+      .in("title_original", titles);
+    for (const p of byTitle || []) {
+      existingTitles.add(p.title_original);
+    }
+  }
 
-  return papers.filter((p) => !p.doi || !existingDois.has(p.doi));
+  return papers.filter(
+    (p) =>
+      (!p.doi || !existingDois.has(p.doi)) &&
+      !existingTitles.has(p.title),
+  );
 }

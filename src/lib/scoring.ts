@@ -33,6 +33,7 @@ export type ReviewSettings = {
   auto_approve_threshold: number;
   auto_skip_threshold: number;
   scoring_enabled: boolean;
+  auto_collect_enabled: boolean;
 };
 
 /**
@@ -45,6 +46,7 @@ export async function getReviewSettings(): Promise<ReviewSettings> {
     auto_approve_threshold: 70,
     auto_skip_threshold: 30,
     scoring_enabled: true,
+    auto_collect_enabled: true,
   };
 
   if (data) {
@@ -58,6 +60,9 @@ export async function getReviewSettings(): Promise<ReviewSettings> {
           break;
         case "scoring_enabled":
           settings.scoring_enabled = row.value === "true";
+          break;
+        case "auto_collect_enabled":
+          settings.auto_collect_enabled = row.value === "true";
           break;
       }
     }

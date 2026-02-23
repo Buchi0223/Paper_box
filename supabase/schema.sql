@@ -86,7 +86,8 @@ CREATE TABLE review_settings (
 INSERT INTO review_settings (key, value) VALUES
   ('auto_approve_threshold', '70'),
   ('auto_skip_threshold', '30'),
-  ('scoring_enabled', 'true');
+  ('scoring_enabled', 'true'),
+  ('auto_collect_enabled', 'true');
 
 -- インデックス
 CREATE INDEX idx_papers_collected_at ON papers(collected_at DESC);
