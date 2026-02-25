@@ -5,11 +5,13 @@ import { useState, useEffect, useCallback } from "react";
 type CollectionLog = {
   id: string;
   keyword_id: string;
+  feed_id: string | null;
   status: string;
   papers_found: number;
   message: string | null;
   executed_at: string;
   keywords: { keyword: string } | null;
+  rss_feeds: { name: string } | null;
 };
 
 type CollectSummary = {
@@ -538,7 +540,16 @@ export default function SettingsPage() {
                   />
                   <div>
                     <span className="text-sm text-gray-900 dark:text-white">
-                      {log.keywords?.keyword || "不明"}
+                      {log.keywords?.keyword ? (
+                        log.keywords.keyword
+                      ) : log.rss_feeds?.name ? (
+                        <span className="flex items-center gap-1">
+                          <span className="rounded bg-orange-100 px-1 text-xs text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">RSS</span>
+                          {log.rss_feeds.name}
+                        </span>
+                      ) : (
+                        "不明"
+                      )}
                     </span>
                     {log.message && (
                       <p className="text-xs text-gray-500 dark:text-gray-400">
