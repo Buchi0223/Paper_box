@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from("collection_logs")
-    .select("*, keywords(keyword)")
+    .select("*, keywords(keyword), rss_feeds(name)")
     .order("executed_at", { ascending: false })
     .limit(limit);
 
