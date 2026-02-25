@@ -124,12 +124,15 @@ async function collectForKeyword(
 
     // DOIベースの重複排除
     const uniquePapers = deduplicatePapers(normalizedPapers);
+    const apiDuplicateCount = normalizedPapers.length - uniquePapers.length;
 
     // ジャーナルフィルタリング
     const journalFiltered = filterByJournals(uniquePapers, kw.journals);
+    const journalExcluded = uniquePapers.length - journalFiltered.length;
 
     // DB内の既存論文との重複チェック（DOIベース）
     const newPapers = await filterExisting(journalFiltered);
+    const dbDuplicateCount = journalFiltered.length - newPapers.length;
 
     let savedCount = 0;
 
@@ -209,9 +212,13 @@ async function collectForKeyword(
       keyword: kw.keyword,
       status: "success",
       papers_found: savedCount,
-      message: kw.journals.length > 0
-        ? `${uniquePapers.length}件中${journalFiltered.length}件がジャーナルフィルタ通過、${savedCount}件を新規登録`
-        : `${uniquePapers.length}件中${savedCount}件を新規登録`,
+      message: buildKeywordLogMessage(
+        normalizedPapers.length,
+        apiDuplicateCount,
+        journalExcluded,
+        dbDuplicateCount,
+        savedCount,
+      ),
     };
 
     await supabase.from("collection_logs").insert({
@@ -276,6 +283,30 @@ function normalizeOpenAlex(paper: OpenAlexPaper): NormalizedPaper {
     url: paper.url,
     venue: paper.venue,
   };
+}
+
+/**
+ * キーワード収集ログメッセージを組み立てる
+ */
+function buildKeywordLogMessage(
+  totalCount: number,
+  apiDuplicateCount: number,
+  journalExcluded: number,
+  dbDuplicateCount: number,
+  savedCount: number,
+): string {
+  const parts: string[] = [`${totalCount}件取得`];
+  if (apiDuplicateCount > 0) {
+    parts.push(`API間重複${apiDuplicateCount}件`);
+  }
+  if (journalExcluded > 0) {
+    parts.push(`ジャーナルフィルタ除外${journalExcluded}件`);
+  }
+  if (dbDuplicateCount > 0) {
+    parts.push(`DB既存${dbDuplicateCount}件`);
+  }
+  parts.push(`${savedCount}件を新規登録`);
+  return parts.join("、");
 }
 
 /**
