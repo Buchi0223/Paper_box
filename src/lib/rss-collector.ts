@@ -97,6 +97,7 @@ async function collectForFeed(
 
     // DOIベースの重複排除（DB内の既存論文との照合）
     const newEntries = await filterExistingEntries(entries);
+    const duplicateCount = entries.length - newEntries.length;
 
     let savedCount = 0;
 
@@ -166,7 +167,7 @@ async function collectForFeed(
       feed_name: feed.name,
       status: "success",
       papers_found: savedCount,
-      message: `${entries.length}件中${savedCount}件を新規登録`,
+      message: buildRssLogMessage(entries.length, duplicateCount, savedCount),
     };
 
     await supabase.from("collection_logs").insert({
@@ -196,6 +197,22 @@ async function collectForFeed(
       message,
     };
   }
+}
+
+/**
+ * RSS収集ログメッセージを組み立てる
+ */
+function buildRssLogMessage(
+  totalCount: number,
+  duplicateCount: number,
+  savedCount: number,
+): string {
+  const parts: string[] = [`${totalCount}件取得`];
+  if (duplicateCount > 0) {
+    parts.push(`${duplicateCount}件は既存`);
+  }
+  parts.push(`${savedCount}件を新規登録`);
+  return parts.join("、");
 }
 
 /**
