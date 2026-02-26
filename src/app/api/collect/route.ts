@@ -15,6 +15,18 @@ export async function POST() {
     const rssTotal = rssResults.reduce((sum, r) => sum + r.papers_found, 0);
     const rssErrors = rssResults.filter((r) => r.status === "error");
 
+    // review_breakdownの集計
+    const totalBreakdown = { auto_approved: 0, pending: 0, auto_skipped: 0 };
+    for (const r of [...keywordResults, ...rssResults]) {
+      if (r.review_breakdown) {
+        totalBreakdown.auto_approved += r.review_breakdown.auto_approved;
+        totalBreakdown.pending += r.review_breakdown.pending;
+        totalBreakdown.auto_skipped += r.review_breakdown.auto_skipped;
+      }
+    }
+
+    const totalPapers = keywordTotal + rssTotal;
+
     return NextResponse.json({
       keyword_results: keywordResults,
       rss_results: rssResults,
@@ -25,7 +37,8 @@ export async function POST() {
         feeds_processed: rssResults.length,
         rss_papers_found: rssTotal,
         rss_errors: rssErrors.length,
-        total_papers_found: keywordTotal + rssTotal,
+        total_papers_found: totalPapers,
+        review_breakdown: totalPapers > 0 ? totalBreakdown : null,
       },
     });
   } catch (error) {

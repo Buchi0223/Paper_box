@@ -17,12 +17,19 @@ type RssFeed = {
   last_fetched_at: string | null;
 };
 
+type ReviewBreakdown = {
+  auto_approved: number;
+  pending: number;
+  auto_skipped: number;
+};
+
 export type RssCollectResult = {
   feed_id: string;
   feed_name: string;
   status: "success" | "error";
   papers_found: number;
   message: string | null;
+  review_breakdown: ReviewBreakdown | null;
 };
 
 /**
@@ -77,6 +84,7 @@ async function collectForFeed(
         status: "success",
         papers_found: 0,
         message: "新着エントリなし",
+        review_breakdown: null,
       };
 
       await supabase.from("collection_logs").insert({
@@ -100,6 +108,7 @@ async function collectForFeed(
     const duplicateCount = entries.length - newEntries.length;
 
     let savedCount = 0;
+    const reviewBreakdown: ReviewBreakdown = { auto_approved: 0, pending: 0, auto_skipped: 0 };
 
     for (const entry of newEntries) {
       try {
@@ -149,6 +158,9 @@ async function collectForFeed(
 
         if (!insertError) {
           savedCount++;
+          if (reviewStatus === "auto_approved") reviewBreakdown.auto_approved++;
+          else if (reviewStatus === "auto_skipped") reviewBreakdown.auto_skipped++;
+          else reviewBreakdown.pending++;
         }
       } catch (e) {
         console.error(`Failed to process RSS entry "${entry.title}":`, e);
@@ -162,12 +174,14 @@ async function collectForFeed(
       .eq("id", feed.id);
 
     // 収集ログを記録
+    const hasBreakdown = savedCount > 0 && settings.scoring_enabled;
     const result: RssCollectResult = {
       feed_id: feed.id,
       feed_name: feed.name,
       status: "success",
       papers_found: savedCount,
-      message: buildRssLogMessage(entries.length, duplicateCount, savedCount),
+      message: buildRssLogMessage(entries.length, duplicateCount, savedCount, hasBreakdown ? reviewBreakdown : null),
+      review_breakdown: hasBreakdown ? reviewBreakdown : null,
     };
 
     await supabase.from("collection_logs").insert({
@@ -195,6 +209,7 @@ async function collectForFeed(
       status: "error",
       papers_found: 0,
       message,
+      review_breakdown: null,
     };
   }
 }
@@ -206,12 +221,16 @@ function buildRssLogMessage(
   totalCount: number,
   duplicateCount: number,
   savedCount: number,
+  reviewBreakdown: ReviewBreakdown | null,
 ): string {
   const parts: string[] = [`${totalCount}件取得`];
   if (duplicateCount > 0) {
     parts.push(`${duplicateCount}件は既存`);
   }
   parts.push(`${savedCount}件を新規登録`);
+  if (reviewBreakdown && savedCount > 0) {
+    parts.push(`（自動承認: ${reviewBreakdown.auto_approved}, レビュー待ち: ${reviewBreakdown.pending}, 自動スキップ: ${reviewBreakdown.auto_skipped}）`);
+  }
   return parts.join("、");
 }
 
