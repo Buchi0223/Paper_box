@@ -25,6 +25,7 @@ export default function ReviewPage() {
   const [bulkMessage, setBulkMessage] = useState<string | null>(null);
   const [isBulkActioning, setIsBulkActioning] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>("pending");
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   const handleBulkApprove = async () => {
     if (isBulkActioning) return;
@@ -75,6 +76,8 @@ export default function ReviewPage() {
   }, [sortOrder, activeTab]);
 
   const fetchMorePapers = useCallback(async () => {
+    if (isLoadingMore) return;
+    setIsLoadingMore(true);
     try {
       const res = await fetch(
         `/api/papers/review?status=${activeTab}&sort=${sortOrder}&limit=50&offset=${papers.length}`,
@@ -87,8 +90,10 @@ export default function ReviewPage() {
       }
     } catch {
       setError("追加読み込みに失敗しました");
+    } finally {
+      setIsLoadingMore(false);
     }
-  }, [sortOrder, activeTab, papers.length]);
+  }, [sortOrder, activeTab, papers.length, isLoadingMore]);
 
   useEffect(() => {
     fetchPapers();
@@ -356,9 +361,10 @@ export default function ReviewPage() {
                 <div className="pt-2 text-center">
                   <button
                     onClick={fetchMorePapers}
-                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                    disabled={isLoadingMore}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                   >
-                    もっと読み込む
+                    {isLoadingMore ? "読み込み中..." : "もっと読み込む"}
                   </button>
                 </div>
               )}
