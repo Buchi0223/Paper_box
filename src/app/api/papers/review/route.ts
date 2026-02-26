@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
   const status = searchParams.get("status") || "pending";
   const sort = searchParams.get("sort") || "score_desc";
   const limit = parseInt(searchParams.get("limit") || "20");
+  const offset = parseInt(searchParams.get("offset") || "0");
 
   // バリデーション
   const allowedStatuses = ["pending", "auto_skipped"];
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
     query = query.order("collected_at", { ascending: false });
   }
 
-  query = query.limit(limit);
+  query = query.range(offset, offset + limit - 1);
 
   const { data, error } = await query;
 

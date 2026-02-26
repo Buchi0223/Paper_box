@@ -74,6 +74,22 @@ export default function ReviewPage() {
     }
   }, [sortOrder, activeTab]);
 
+  const fetchMorePapers = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `/api/papers/review?status=${activeTab}&sort=${sortOrder}&limit=50&offset=${papers.length}`,
+      );
+      if (res.ok) {
+        const data: ReviewResponse = await res.json();
+        setPapers((prev) => [...prev, ...data.papers]);
+        setTotalPending(data.total_pending);
+        setTotalAutoSkipped(data.total_auto_skipped);
+      }
+    } catch {
+      setError("追加読み込みに失敗しました");
+    }
+  }, [sortOrder, activeTab, papers.length]);
+
   useEffect(() => {
     fetchPapers();
   }, [fetchPapers]);
@@ -339,7 +355,7 @@ export default function ReviewPage() {
               {papers.length < totalAutoSkipped && (
                 <div className="pt-2 text-center">
                   <button
-                    onClick={fetchPapers}
+                    onClick={fetchMorePapers}
                     className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
                   >
                     もっと読み込む
