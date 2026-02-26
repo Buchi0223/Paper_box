@@ -16,16 +16,18 @@ export async function GET(request: NextRequest) {
   const allowedStatuses = ["pending", "auto_skipped"];
   const filterStatus = allowedStatuses.includes(status) ? status : "pending";
 
-  // 件数取得
-  const { count: totalPending } = await supabase
-    .from("papers")
-    .select("*", { count: "exact", head: true })
-    .eq("review_status", "pending");
-
-  const { count: totalAutoSkipped } = await supabase
-    .from("papers")
-    .select("*", { count: "exact", head: true })
-    .eq("review_status", "auto_skipped");
+  // 件数取得（並列実行）
+  const [{ count: totalPending }, { count: totalAutoSkipped }] =
+    await Promise.all([
+      supabase
+        .from("papers")
+        .select("*", { count: "exact", head: true })
+        .eq("review_status", "pending"),
+      supabase
+        .from("papers")
+        .select("*", { count: "exact", head: true })
+        .eq("review_status", "auto_skipped"),
+    ]);
 
   // 論文取得
   let query = supabase

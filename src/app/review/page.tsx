@@ -78,6 +78,38 @@ export default function ReviewPage() {
     fetchPapers();
   }, [fetchPapers]);
 
+  const handleReview = useCallback(
+    async (action: "approve" | "skip") => {
+      if (isActioning || currentIndex >= papers.length) return;
+
+      const paper = papers[currentIndex];
+      setIsActioning(true);
+      setError(null);
+
+      try {
+        const res = await fetch("/api/papers/review", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paper_id: paper.id, action }),
+        });
+
+        if (!res.ok) {
+          const data = await res.json();
+          setError(data.error || "レビュー処理に失敗しました");
+          return;
+        }
+
+        setTotalPending((prev) => prev - 1);
+        setCurrentIndex((prev) => prev + 1);
+      } catch {
+        setError("レビュー処理に失敗しました");
+      } finally {
+        setIsActioning(false);
+      }
+    },
+    [isActioning, currentIndex, papers],
+  );
+
   // キーボードショートカット（レビュー待ちタブでのみ有効）
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -100,36 +132,7 @@ export default function ReviewPage() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  });
-
-  const handleReview = async (action: "approve" | "skip") => {
-    if (isActioning || currentIndex >= papers.length) return;
-
-    const paper = papers[currentIndex];
-    setIsActioning(true);
-    setError(null);
-
-    try {
-      const res = await fetch("/api/papers/review", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paper_id: paper.id, action }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || "レビュー処理に失敗しました");
-        return;
-      }
-
-      setTotalPending((prev) => prev - 1);
-      setCurrentIndex((prev) => prev + 1);
-    } catch {
-      setError("レビュー処理に失敗しました");
-    } finally {
-      setIsActioning(false);
-    }
-  };
+  }, [activeTab, isActioning, papers.length, currentIndex, handleReview]);
 
   const handleAutoSkippedAction = async (
     action: "restore" | "skip",
@@ -166,8 +169,6 @@ export default function ReviewPage() {
   };
 
   const currentPaper = papers[currentIndex];
-  const reviewed = currentIndex;
-  const remaining = totalPending - reviewed;
 
   if (isLoading) {
     return (
@@ -335,6 +336,16 @@ export default function ReviewPage() {
                   }
                 />
               ))}
+              {papers.length < totalAutoSkipped && (
+                <div className="pt-2 text-center">
+                  <button
+                    onClick={fetchPapers}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                  >
+                    もっと読み込む
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </>
