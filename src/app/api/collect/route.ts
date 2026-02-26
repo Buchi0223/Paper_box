@@ -26,6 +26,9 @@ export async function POST() {
     }
 
     const totalPapers = keywordTotal + rssTotal;
+    const hasAnyBreakdown = [...keywordResults, ...rssResults].some(
+      (r) => r.review_breakdown !== null,
+    );
 
     return NextResponse.json({
       keyword_results: keywordResults,
@@ -38,7 +41,8 @@ export async function POST() {
         rss_papers_found: rssTotal,
         rss_errors: rssErrors.length,
         total_papers_found: totalPapers,
-        review_breakdown: totalPapers > 0 ? totalBreakdown : null,
+        review_breakdown:
+          hasAnyBreakdown && totalPapers > 0 ? totalBreakdown : null,
       },
     });
   } catch (error) {
