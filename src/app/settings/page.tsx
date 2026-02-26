@@ -14,10 +14,19 @@ type CollectionLog = {
   rss_feeds: { name: string } | null;
 };
 
+type ReviewBreakdown = {
+  auto_approved: number;
+  pending: number;
+  auto_skipped: number;
+};
+
 type CollectSummary = {
   keywords_processed: number;
+  feeds_processed: number;
   total_papers_found: number;
-  errors: number;
+  keyword_errors: number;
+  rss_errors: number;
+  review_breakdown: ReviewBreakdown | null;
 };
 
 type ScoringSettings = {
@@ -446,11 +455,25 @@ export default function SettingsPage() {
               収集完了
             </p>
             <p className="text-xs text-green-600 dark:text-green-500">
-              {collectResult.keywords_processed}件のキーワードを処理 /{" "}
-              {collectResult.total_papers_found}件の論文を新規登録
-              {collectResult.errors > 0 &&
-                ` / ${collectResult.errors}件のエラー`}
+              {collectResult.keywords_processed}件のキーワード
+              {collectResult.feeds_processed > 0 && ` / ${collectResult.feeds_processed}件のフィード`}
+              を処理 / {collectResult.total_papers_found}件の論文を新規登録
+              {(collectResult.keyword_errors > 0 || collectResult.rss_errors > 0) &&
+                ` / ${collectResult.keyword_errors + collectResult.rss_errors}件のエラー`}
             </p>
+            {collectResult.review_breakdown && collectResult.total_papers_found > 0 && (
+              <div className="mt-1.5 flex gap-3 text-xs">
+                <span className="text-green-700 dark:text-green-400">
+                  自動承認: {collectResult.review_breakdown.auto_approved}件
+                </span>
+                <span className="text-yellow-700 dark:text-yellow-400">
+                  レビュー待ち: {collectResult.review_breakdown.pending}件
+                </span>
+                <span className="text-red-700 dark:text-red-400">
+                  自動スキップ: {collectResult.review_breakdown.auto_skipped}件
+                </span>
+              </div>
+            )}
           </div>
         )}
 

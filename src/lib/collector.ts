@@ -22,12 +22,19 @@ type Keyword = {
   is_active: boolean;
 };
 
+type ReviewBreakdown = {
+  auto_approved: number;
+  pending: number;
+  auto_skipped: number;
+};
+
 type CollectResult = {
   keyword_id: string;
   keyword: string;
   status: "success" | "error";
   papers_found: number;
   message: string | null;
+  review_breakdown: ReviewBreakdown | null;
 };
 
 // 統一された論文データ構造
@@ -135,6 +142,7 @@ async function collectForKeyword(
     const dbDuplicateCount = journalFiltered.length - newPapers.length;
 
     let savedCount = 0;
+    const reviewBreakdown: ReviewBreakdown = { auto_approved: 0, pending: 0, auto_skipped: 0 };
 
     for (const paper of newPapers) {
       try {
@@ -186,6 +194,9 @@ async function collectForKeyword(
 
         if (!insertError) {
           savedCount++;
+          if (reviewStatus === "auto_approved") reviewBreakdown.auto_approved++;
+          else if (reviewStatus === "auto_skipped") reviewBreakdown.auto_skipped++;
+          else reviewBreakdown.pending++;
 
           // paper_keywordsに関連付け
           const { data: savedPaper } = await supabase
@@ -207,6 +218,7 @@ async function collectForKeyword(
     }
 
     // 収集ログを記録
+    const hasBreakdown = savedCount > 0 && settings.scoring_enabled;
     const logResult: CollectResult = {
       keyword_id: kw.id,
       keyword: kw.keyword,
@@ -218,7 +230,9 @@ async function collectForKeyword(
         journalExcluded,
         dbDuplicateCount,
         savedCount,
+        hasBreakdown ? reviewBreakdown : null,
       ),
+      review_breakdown: hasBreakdown ? reviewBreakdown : null,
     };
 
     await supabase.from("collection_logs").insert({
@@ -245,6 +259,7 @@ async function collectForKeyword(
       status: "error",
       papers_found: 0,
       message,
+      review_breakdown: null,
     };
   }
 }
@@ -294,6 +309,7 @@ function buildKeywordLogMessage(
   journalExcluded: number,
   dbDuplicateCount: number,
   savedCount: number,
+  reviewBreakdown: ReviewBreakdown | null,
 ): string {
   const parts: string[] = [`${totalCount}件取得`];
   if (apiDuplicateCount > 0) {
@@ -306,6 +322,9 @@ function buildKeywordLogMessage(
     parts.push(`DB既存${dbDuplicateCount}件`);
   }
   parts.push(`${savedCount}件を新規登録`);
+  if (reviewBreakdown && savedCount > 0) {
+    parts.push(`（自動承認: ${reviewBreakdown.auto_approved}, レビュー待ち: ${reviewBreakdown.pending}, 自動スキップ: ${reviewBreakdown.auto_skipped}）`);
+  }
   return parts.join("、");
 }
 
