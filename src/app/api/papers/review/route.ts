@@ -4,24 +4,34 @@ import { learnFromApproval, learnFromSkip } from "@/lib/interest-learner";
 import { trackScoringAccuracy } from "@/lib/scoring";
 
 /**
- * GET /api/papers/review — 未レビュー論文を取得
+ * GET /api/papers/review — レビュー対象論文を取得
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
+  const status = searchParams.get("status") || "pending";
   const sort = searchParams.get("sort") || "score_desc";
   const limit = parseInt(searchParams.get("limit") || "20");
 
-  // 未レビュー件数を取得
+  // バリデーション
+  const allowedStatuses = ["pending", "auto_skipped"];
+  const filterStatus = allowedStatuses.includes(status) ? status : "pending";
+
+  // 件数取得
   const { count: totalPending } = await supabase
     .from("papers")
     .select("*", { count: "exact", head: true })
     .eq("review_status", "pending");
 
-  // 未レビュー論文を取得
+  const { count: totalAutoSkipped } = await supabase
+    .from("papers")
+    .select("*", { count: "exact", head: true })
+    .eq("review_status", "auto_skipped");
+
+  // 論文取得
   let query = supabase
     .from("papers")
     .select("*")
-    .eq("review_status", "pending");
+    .eq("review_status", filterStatus);
 
   if (sort === "score_desc") {
     query = query.order("relevance_score", {
@@ -43,11 +53,12 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     papers: data || [],
     total_pending: totalPending || 0,
+    total_auto_skipped: totalAutoSkipped || 0,
   });
 }
 
 /**
- * POST /api/papers/review — レビュー判定（approve / skip）
+ * POST /api/papers/review — レビュー判定（approve / skip / restore）
  */
 export async function POST(request: NextRequest) {
   const body = await request.json();
@@ -60,13 +71,38 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (action !== "approve" && action !== "skip") {
+  if (!["approve", "skip", "restore"].includes(action)) {
     return NextResponse.json(
-      { error: "action は 'approve' または 'skip' を指定してください" },
+      {
+        error:
+          "action は 'approve', 'skip', 'restore' のいずれかを指定してください",
+      },
       { status: 400 },
     );
   }
 
+  // restore: auto_skipped → pending
+  if (action === "restore") {
+    const { data, error } = await supabase
+      .from("papers")
+      .update({ review_status: "pending" })
+      .eq("id", paper_id)
+      .eq("review_status", "auto_skipped")
+      .select()
+      .single();
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      review_status: "pending",
+      paper: data,
+    });
+  }
+
+  // approve / skip
   const reviewStatus = action === "approve" ? "approved" : "skipped";
 
   const { data, error } = await supabase
@@ -87,7 +123,7 @@ export async function POST(request: NextRequest) {
     console.error("Scoring tracking error:", e);
   }
 
-  // 関心プロファイルの自動学習（バックグラウンド、レスポンスをブロックしない）
+  // 関心プロファイルの自動学習
   let learnedInterests: string[] = [];
   try {
     if (action === "approve") {
