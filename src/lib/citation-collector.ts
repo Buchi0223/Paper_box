@@ -313,16 +313,23 @@ function buildCitationLogMessage(
 }
 
 /**
+ * タイトルを正規化する（大文字小文字・末尾ピリオド・空白の差異を吸収）
+ */
+function normalizeTitle(title: string): string {
+  return title.toLowerCase().trim().replace(/\.$/, "");
+}
+
+/**
  * DOI/タイトルベースで重複排除する（API内）
  */
 function deduplicatePapers(
   papers: SemanticScholarPaper[],
 ): SemanticScholarPaper[] {
-  const seen = new Map<string, boolean>();
+  const seen = new Set<string>();
   return papers.filter((p) => {
-    const key = p.doi || p.title.toLowerCase().trim();
+    const key = p.doi || normalizeTitle(p.title);
     if (seen.has(key)) return false;
-    seen.set(key, true);
+    seen.add(key);
     return true;
   });
 }
@@ -335,7 +342,7 @@ function filterBySeenKeys(
   seenKeys: Set<string>,
 ): SemanticScholarPaper[] {
   return papers.filter((p) => {
-    const key = p.doi || p.title.toLowerCase().trim();
+    const key = p.doi || normalizeTitle(p.title);
     if (seenKeys.has(key)) return false;
     seenKeys.add(key);
     return true;
@@ -343,7 +350,7 @@ function filterBySeenKeys(
 }
 
 /**
- * DB内に既に存在する論文を除外する（DOI + タイトル原題ベース）
+ * DB内に既に存在する論文を除外する（DOI + タイトル正規化ベース）
  */
 async function filterExisting(
   papers: SemanticScholarPaper[],
@@ -364,23 +371,31 @@ async function filterExisting(
     }
   }
 
-  // タイトル原題ベースの重複チェック
-  const titles = papers.map((p) => p.title);
-  const existingTitles = new Set<string>();
+  // タイトルベースの重複チェック（末尾ピリオド有無の差異を吸収）
+  const titleVariants = new Set<string>();
+  for (const p of papers) {
+    const t = p.title.trim();
+    titleVariants.add(t);
+    const stripped = t.replace(/\.$/, "");
+    titleVariants.add(stripped);
+    titleVariants.add(stripped + ".");
+  }
 
-  if (titles.length > 0) {
+  const existingNormalized = new Set<string>();
+
+  if (titleVariants.size > 0) {
     const { data: byTitle } = await supabase
       .from("papers")
       .select("title_original")
-      .in("title_original", titles);
+      .in("title_original", [...titleVariants]);
     for (const p of byTitle || []) {
-      existingTitles.add(p.title_original);
+      existingNormalized.add(normalizeTitle(p.title_original));
     }
   }
 
   return papers.filter(
     (p) =>
       (!p.doi || !existingDois.has(p.doi)) &&
-      !existingTitles.has(p.title),
+      !existingNormalized.has(normalizeTitle(p.title)),
   );
 }
