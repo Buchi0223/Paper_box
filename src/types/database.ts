@@ -61,6 +61,7 @@ export type Paper = {
   memo: string | null;
   review_status: string;
   relevance_score: number | null;
+  citation_explored_at: string | null;
   collected_at: string;
   created_at: string;
   updated_at: string;
@@ -84,6 +85,7 @@ export type PaperInsert = {
   memo?: string | null;
   review_status?: string;
   relevance_score?: number | null;
+  citation_explored_at?: string | null;
   collected_at?: string;
   created_at?: string;
   updated_at?: string;
@@ -107,6 +109,7 @@ export type PaperUpdate = {
   memo?: string | null;
   review_status?: string;
   relevance_score?: number | null;
+  citation_explored_at?: string | null;
   collected_at?: string;
   created_at?: string;
   updated_at?: string;
@@ -151,6 +154,7 @@ export type CollectionLog = {
   id: string;
   keyword_id: string | null;
   feed_id: string | null;
+  seed_paper_id: string | null;
   status: string;
   papers_found: number;
   message: string | null;
@@ -161,6 +165,7 @@ export type CollectionLogInsert = {
   id?: string;
   keyword_id?: string | null;
   feed_id?: string | null;
+  seed_paper_id?: string | null;
   status?: string;
   papers_found?: number;
   message?: string | null;
