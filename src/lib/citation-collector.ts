@@ -249,10 +249,10 @@ async function collectForSeedPaper(
     };
   } catch (e) {
     // レート制限（429）の場合は citation_explored_at をセットしない（次回再試行）
-    const is429 =
-      e instanceof Error && e.message.includes("429");
+    const isRateLimited =
+      e instanceof Error && e.message.includes("rate limit");
 
-    if (!is429) {
+    if (!isRateLimited) {
       await supabase
         .from("papers")
         .update({ citation_explored_at: new Date().toISOString() })
