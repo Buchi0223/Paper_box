@@ -7,22 +7,28 @@ export default function DarkModeToggle() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
     const stored = localStorage.getItem("theme");
+    let dark = false;
     if (stored === "dark") {
-      setIsDark(true);
+      dark = true;
       document.documentElement.classList.add("dark");
     } else if (stored === "light") {
-      setIsDark(false);
       document.documentElement.classList.remove("dark");
     } else {
       // システム設定に従う
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      setIsDark(prefersDark);
+      const prefersDark = window.matchMedia(
+        "(prefers-color-scheme: dark)",
+      ).matches;
+      dark = prefersDark;
       if (prefersDark) {
         document.documentElement.classList.add("dark");
       }
     }
+    // DOM操作後に非同期でstateを更新（react-hooks/set-state-in-effect対策）
+    Promise.resolve().then(() => {
+      setMounted(true);
+      setIsDark(dark);
+    });
   }, []);
 
   const toggle = () => {

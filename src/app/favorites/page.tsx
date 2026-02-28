@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import type { Paper } from "@/types/database";
 import PaperCard from "@/components/PaperCard";
@@ -23,8 +23,9 @@ function FavoritesContent() {
   const page = parseInt(searchParams.get("page") || "1");
   const search = searchParams.get("search") || "";
 
-  const fetchFavorites = useCallback(async () => {
-    setIsLoading(true);
+  useEffect(() => {
+    let cancelled = false;
+
     const params = new URLSearchParams({
       page: page.toString(),
       limit: "20",
@@ -34,15 +35,19 @@ function FavoritesContent() {
     });
     if (search) params.set("search", search);
 
-    const res = await fetch(`/api/papers?${params}`);
-    const json = await res.json();
-    setData(json);
-    setIsLoading(false);
-  }, [page, search]);
+    fetch(`/api/papers?${params}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (!cancelled) {
+          setData(json);
+          setIsLoading(false);
+        }
+      });
 
-  useEffect(() => {
-    fetchFavorites();
-  }, [fetchFavorites]);
+    return () => {
+      cancelled = true;
+    };
+  }, [page, search]);
 
   return (
     <div>
