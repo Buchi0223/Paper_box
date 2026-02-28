@@ -1,13 +1,18 @@
 import { NextResponse } from "next/server";
 import { collectAllPapers } from "@/lib/collector";
 import { collectAllRssFeeds } from "@/lib/rss-collector";
-import { collectAllCitations } from "@/lib/citation-collector";
+import {
+  collectAllCitations,
+  type CitationCollectResult,
+} from "@/lib/citation-collector";
 
 export const maxDuration = 60;
 
 // 手動収集実行API
 export async function POST() {
   try {
+    const startTime = Date.now();
+
     // キーワード収集
     const keywordResults = await collectAllPapers();
     const keywordTotal = keywordResults.reduce((sum, r) => sum + r.papers_found, 0);
@@ -18,8 +23,15 @@ export async function POST() {
     const rssTotal = rssResults.reduce((sum, r) => sum + r.papers_found, 0);
     const rssErrors = rssResults.filter((r) => r.status === "error");
 
-    // 引用探索（手動実行時は最大20シード）
-    const citationResults = await collectAllCitations(20);
+    // 引用探索（経過時間に応じてシード数を動的に調整）
+    let citationResults: CitationCollectResult[] = [];
+    try {
+      const elapsedSec = (Date.now() - startTime) / 1000;
+      const maxSeeds = elapsedSec > 30 ? 5 : elapsedSec > 15 ? 10 : 20;
+      citationResults = await collectAllCitations(maxSeeds);
+    } catch (e) {
+      console.error("Citation collection failed:", e);
+    }
     const citationTotal = citationResults.reduce(
       (sum, r) => sum + r.papers_found,
       0,
@@ -27,14 +39,7 @@ export async function POST() {
 
     // review_breakdownの集計
     const totalBreakdown = { auto_approved: 0, pending: 0, auto_skipped: 0 };
-    for (const r of [...keywordResults, ...rssResults]) {
-      if (r.review_breakdown) {
-        totalBreakdown.auto_approved += r.review_breakdown.auto_approved;
-        totalBreakdown.pending += r.review_breakdown.pending;
-        totalBreakdown.auto_skipped += r.review_breakdown.auto_skipped;
-      }
-    }
-    for (const r of citationResults) {
+    for (const r of [...keywordResults, ...rssResults, ...citationResults]) {
       if (r.review_breakdown) {
         totalBreakdown.auto_approved += r.review_breakdown.auto_approved;
         totalBreakdown.pending += r.review_breakdown.pending;
