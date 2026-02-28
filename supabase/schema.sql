@@ -21,6 +21,7 @@ CREATE TABLE papers (
   memo TEXT,
   review_status TEXT NOT NULL DEFAULT 'approved',
   relevance_score INTEGER,
+  citation_explored_at TIMESTAMPTZ DEFAULT NULL,
   collected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -59,6 +60,7 @@ CREATE TABLE collection_logs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   keyword_id UUID REFERENCES keywords(id) ON DELETE CASCADE,
   feed_id UUID REFERENCES rss_feeds(id) ON DELETE SET NULL,
+  seed_paper_id UUID REFERENCES papers(id) ON DELETE SET NULL,
   status TEXT NOT NULL DEFAULT 'success',
   papers_found INTEGER NOT NULL DEFAULT 0,
   message TEXT,
@@ -99,6 +101,7 @@ CREATE INDEX idx_papers_relevance_score ON papers(relevance_score) WHERE relevan
 CREATE INDEX idx_keywords_is_active ON keywords(is_active) WHERE is_active = TRUE;
 CREATE INDEX idx_rss_feeds_is_active ON rss_feeds(is_active) WHERE is_active = TRUE;
 CREATE INDEX idx_collection_logs_executed_at ON collection_logs(executed_at DESC);
+CREATE INDEX idx_papers_citation_unexplored ON papers(collected_at DESC) WHERE citation_explored_at IS NULL;
 
 -- updated_at を自動更新するトリガー
 CREATE OR REPLACE FUNCTION update_updated_at()
