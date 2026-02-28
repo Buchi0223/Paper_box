@@ -27,7 +27,7 @@ export async function POST() {
     let citationResults: CitationCollectResult[] = [];
     try {
       const elapsedSec = (Date.now() - startTime) / 1000;
-      const maxSeeds = elapsedSec > 30 ? 5 : elapsedSec > 15 ? 10 : 20;
+      const maxSeeds = elapsedSec > 30 ? 5 : elapsedSec > 15 ? 8 : 10;
       citationResults = await collectAllCitations(maxSeeds);
     } catch (e) {
       console.error("Citation collection failed:", e);
