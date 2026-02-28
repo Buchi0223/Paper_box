@@ -46,11 +46,10 @@ export async function resolveS2PaperId(
         const data = await res.json();
         return data.paperId || null;
       }
-      if (res.status === 404) {
-        // DOIで見つからない場合はタイトル検索にフォールバック
-      } else if (res.status === 429) {
+      if (res.status === 429) {
         throw new Error("Semantic Scholar API rate limit exceeded");
       }
+      // 404 or other errors → fall through to title search
     }
 
     // タイトルで検索
@@ -202,8 +201,7 @@ export async function searchSemanticScholar(
   const params = new URLSearchParams({
     query,
     limit: String(Math.min(limit, 100)),
-    fields:
-      "title,authors,abstract,year,externalIds,url,venue,publicationDate",
+    fields: S2_FIELDS,
   });
 
   const res = await fetch(
@@ -228,17 +226,7 @@ export async function searchSemanticScholar(
 
   return data.data
     .filter((item: S2RawPaper) => item.title)
-    .map((item: S2RawPaper) => ({
-      title: item.title,
-      authors: (item.authors || []).map(
-        (a: { name: string }) => a.name,
-      ),
-      abstract: item.abstract || null,
-      published: item.publicationDate?.slice(0, 10) || (item.year ? `${item.year}-01-01` : null),
-      doi: item.externalIds?.DOI || null,
-      url: item.url || `https://www.semanticscholar.org/paper/${item.paperId}`,
-      venue: item.venue || null,
-    }));
+    .map(normalizeS2Paper);
 }
 
 type S2RawPaper = {
