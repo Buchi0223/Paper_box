@@ -14,6 +14,19 @@ function truncate(text: string | null, maxLength: number): string {
   return text.slice(0, maxLength) + "...";
 }
 
+const sourceBadge: Record<string, { label: string; className: string }> = {
+  arxiv: { label: "arXiv", className: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400" },
+  semantic_scholar: { label: "Semantic Scholar", className: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400" },
+  openalex: { label: "OpenAlex", className: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" },
+  rss: { label: "RSS", className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400" },
+  manual: { label: "手動", className: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400" },
+  citation: { label: "引用発見", className: "bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900/30 dark:text-fuchsia-400" },
+};
+
+function getSourceBadge(source: string) {
+  return sourceBadge[source] ?? { label: source, className: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400" };
+}
+
 export default function PaperCard({ paper }: { paper: Paper }) {
   return (
     <Link href={`/papers/${paper.id}`} className="block">
@@ -52,9 +65,14 @@ export default function PaperCard({ paper }: { paper: Paper }) {
         )}
 
         <div className="mt-3 flex items-center gap-2">
-          <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-400">
-            {paper.source}
-          </span>
+          {(() => {
+            const badge = getSourceBadge(paper.source);
+            return (
+              <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${badge.className}`}>
+                {badge.label}
+              </span>
+            );
+          })()}
           {paper.review_status === "auto_approved" && (
             <span className="rounded-full bg-purple-50 px-2.5 py-0.5 text-xs font-medium text-purple-600 dark:bg-purple-900/30 dark:text-purple-400">
               AI推薦

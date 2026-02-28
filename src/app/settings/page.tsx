@@ -4,14 +4,19 @@ import { useState, useEffect, useCallback } from "react";
 
 type CollectionLog = {
   id: string;
-  keyword_id: string;
+  keyword_id: string | null;
   feed_id: string | null;
+  seed_paper_id: string | null;
   status: string;
   papers_found: number;
   message: string | null;
   executed_at: string;
   keywords: { keyword: string } | null;
   rss_feeds: { name: string } | null;
+  seed_paper: {
+    title_original: string;
+    title_ja: string | null;
+  } | null;
 };
 
 type ReviewBreakdown = {
@@ -26,6 +31,8 @@ type CollectSummary = {
   total_papers_found: number;
   keyword_errors: number;
   rss_errors: number;
+  seeds_explored: number;
+  citation_papers_found: number;
   review_breakdown: ReviewBreakdown | null;
 };
 
@@ -461,6 +468,11 @@ export default function SettingsPage() {
               {(collectResult.keyword_errors > 0 || collectResult.rss_errors > 0) &&
                 ` / ${collectResult.keyword_errors + collectResult.rss_errors}件のエラー`}
             </p>
+            {collectResult.seeds_explored > 0 && (
+              <p className="text-xs text-purple-600 dark:text-purple-400">
+                🔗 引用ネットワーク: {collectResult.seeds_explored}件のシード探索 / {collectResult.citation_papers_found}件の新規発見
+              </p>
+            )}
             {collectResult.review_breakdown && collectResult.total_papers_found > 0 && (
               <div className="mt-1.5 flex gap-3 text-xs">
                 <span className="text-green-700 dark:text-green-400">
@@ -569,6 +581,13 @@ export default function SettingsPage() {
                         <span className="flex items-center gap-1">
                           <span className="rounded bg-orange-100 px-1 text-xs text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">RSS</span>
                           {log.rss_feeds.name}
+                        </span>
+                      ) : log.seed_paper_id ? (
+                        <span className="flex items-center gap-1">
+                          <span className="rounded bg-purple-100 px-1 text-xs text-purple-600 dark:bg-purple-900/30 dark:text-purple-400">引用</span>
+                          <span className="max-w-[200px] truncate">
+                            {log.seed_paper?.title_ja || log.seed_paper?.title_original || "シード論文"}
+                          </span>
                         </span>
                       ) : (
                         "不明"

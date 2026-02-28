@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import type { Paper } from "@/types/database";
 import PaperCard from "@/components/PaperCard";
@@ -27,8 +27,9 @@ function PaperListContent() {
   const dateFrom = searchParams.get("date_from") || "";
   const dateTo = searchParams.get("date_to") || "";
 
-  const fetchPapers = useCallback(async () => {
-    setIsLoading(true);
+  useEffect(() => {
+    let cancelled = false;
+
     const params = new URLSearchParams({
       page: page.toString(),
       limit: "20",
@@ -40,15 +41,19 @@ function PaperListContent() {
     if (dateFrom) params.set("date_from", dateFrom);
     if (dateTo) params.set("date_to", dateTo);
 
-    const res = await fetch(`/api/papers?${params}`);
-    const json = await res.json();
-    setData(json);
-    setIsLoading(false);
-  }, [page, search, sortOrder, keywordId, dateFrom, dateTo]);
+    fetch(`/api/papers?${params}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (!cancelled) {
+          setData(json);
+          setIsLoading(false);
+        }
+      });
 
-  useEffect(() => {
-    fetchPapers();
-  }, [fetchPapers]);
+    return () => {
+      cancelled = true;
+    };
+  }, [page, search, sortOrder, keywordId, dateFrom, dateTo]);
 
   // 日付ごとにグルーピング
   const groupByDate = (papers: Paper[]) => {

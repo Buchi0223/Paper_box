@@ -249,6 +249,31 @@ export async function extractMetadata(text: string): Promise<{
   }
 }
 
+/**
+ * 軽量AI処理 — タイトル翻訳 + 要約のみ（解説省略でトークン約33%削減）
+ * 引用探索で発見した論文向け
+ */
+export async function processLightAI(paper: {
+  title_original: string;
+  authors?: string[];
+  abstract?: string;
+}): Promise<{ title_ja: string; summary_ja: string; total_tokens: number }> {
+  const [titleResult, summaryResult] = await Promise.all([
+    translateTitle(paper.title_original),
+    summarizePaper(paper),
+  ]);
+
+  const totalTokens =
+    (titleResult.usage?.total_tokens || 0) +
+    (summaryResult.usage?.total_tokens || 0);
+
+  return {
+    title_ja: titleResult.title_ja,
+    summary_ja: summaryResult.summary,
+    total_tokens: totalTokens,
+  };
+}
+
 export async function processAllAI(paper: {
   title_original: string;
   authors?: string[];
