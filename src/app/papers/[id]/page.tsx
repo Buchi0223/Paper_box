@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, useRef, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Paper } from "@/types/database";
@@ -19,6 +19,8 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isGeneratingExplanation, setIsGeneratingExplanation] = useState(false);
+  const [isUploadingPdf, setIsUploadingPdf] = useState(false);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const fetchPaper = async () => {
@@ -94,6 +96,39 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
       showToast("解説の生成に失敗しました", "error");
     } finally {
       setIsGeneratingExplanation(false);
+    }
+  };
+
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !paper) return;
+
+    setIsUploadingPdf(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const uploadRes = await fetch("/api/drive/upload", {
+        method: "POST",
+        body: formData,
+      });
+      if (!uploadRes.ok) throw new Error("Upload failed");
+      const { url } = await uploadRes.json();
+
+      const patchRes = await fetch(`/api/papers/${paper.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ google_drive_url: url }),
+      });
+      if (!patchRes.ok) throw new Error("Patch failed");
+      const updatedPaper = await patchRes.json();
+
+      setPaper(updatedPaper);
+      showToast("PDFを登録しました", "success");
+    } catch {
+      showToast("PDFの登録に失敗しました", "error");
+    } finally {
+      setIsUploadingPdf(false);
+      if (pdfInputRef.current) pdfInputRef.current.value = "";
     }
   };
 
@@ -202,7 +237,7 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
             </svg>
             元論文を読む
           </a>
-          {paper.google_drive_url && (
+          {paper.google_drive_url ? (
             <a
               href={paper.google_drive_url}
               target="_blank"
@@ -211,6 +246,33 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
             >
               Google Driveで開く
             </a>
+          ) : (
+            <>
+              <input
+                ref={pdfInputRef}
+                type="file"
+                accept=".pdf,application/pdf"
+                className="hidden"
+                onChange={handlePdfUpload}
+              />
+              <button
+                onClick={() => pdfInputRef.current?.click()}
+                disabled={isUploadingPdf}
+                className="inline-flex items-center gap-2 rounded-lg border border-purple-300 bg-purple-50 px-4 py-2.5 text-sm font-medium text-purple-700 hover:bg-purple-100 disabled:opacity-50 dark:border-purple-600 dark:bg-purple-900/20 dark:text-purple-400 dark:hover:bg-purple-900/30"
+              >
+                {isUploadingPdf ? (
+                  <>
+                    <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    アップロード中...
+                  </>
+                ) : (
+                  "PDFを登録"
+                )}
+              </button>
+            </>
           )}
         </div>
       )}
