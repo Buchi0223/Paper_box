@@ -26,6 +26,7 @@ export default function ReviewPage() {
   const [isBulkActioning, setIsBulkActioning] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>("pending");
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [showBulkSkipConfirm, setShowBulkSkipConfirm] = useState(false);
 
   const handleBulkApprove = async () => {
     if (isBulkActioning) return;
@@ -48,6 +49,32 @@ export default function ReviewPage() {
       }
     } catch {
       setError("一括操作に失敗しました");
+    } finally {
+      setIsBulkActioning(false);
+    }
+  };
+
+  const handleBulkSkipAutoSkipped = async () => {
+    if (isBulkActioning) return;
+    setIsBulkActioning(true);
+    setBulkMessage(null);
+    setError(null);
+    setShowBulkSkipConfirm(false);
+    try {
+      const res = await fetch("/api/papers/review/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "skip_all_auto_skipped" }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setBulkMessage(`${data.affected_count}件の論文をスキップ確定しました`);
+        await fetchPapers();
+      } else {
+        setError(data.error || "一括スキップ確定に失敗しました");
+      }
+    } catch {
+      setError("一括スキップ確定に失敗しました");
     } finally {
       setIsBulkActioning(false);
     }
@@ -221,6 +248,15 @@ export default function ReviewPage() {
               {isBulkActioning ? "処理中..." : "スコア70以上を全て承認"}
             </button>
           )}
+          {activeTab === "auto_skipped" && (
+            <button
+              onClick={() => setShowBulkSkipConfirm(true)}
+              disabled={isBulkActioning || totalAutoSkipped === 0}
+              className="rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+            >
+              {isBulkActioning ? "処理中..." : "全てスキップ確定"}
+            </button>
+          )}
           <select
             value={sortOrder}
             onChange={(e) =>
@@ -285,6 +321,28 @@ export default function ReviewPage() {
       {bulkMessage && (
         <div className="mb-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-400">
           {bulkMessage}
+        </div>
+      )}
+
+      {showBulkSkipConfirm && (
+        <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-800 dark:bg-yellow-900/20">
+          <p className="mb-3 text-sm text-yellow-800 dark:text-yellow-300">
+            自動スキップ済みの論文を全てスキップ確定しますか？
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowBulkSkipConfirm(false)}
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+            >
+              キャンセル
+            </button>
+            <button
+              onClick={handleBulkSkipAutoSkipped}
+              className="rounded-lg bg-gray-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-700"
+            >
+              確定する
+            </button>
+          </div>
         </div>
       )}
 
