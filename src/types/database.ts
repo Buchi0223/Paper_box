@@ -57,6 +57,8 @@ export type Paper = {
   explanation_ja: string | null;
   source: string;
   google_drive_url: string | null;
+  notion_page_id: string | null;
+  notion_page_url: string | null;
   is_favorite: boolean;
   memo: string | null;
   review_status: string;
@@ -80,6 +82,8 @@ export type PaperInsert = {
   explanation_ja?: string | null;
   source?: string;
   google_drive_url?: string | null;
+  notion_page_id?: string | null;
+  notion_page_url?: string | null;
   is_favorite?: boolean;
   memo?: string | null;
   review_status?: string;
@@ -103,6 +107,8 @@ export type PaperUpdate = {
   explanation_ja?: string | null;
   source?: string;
   google_drive_url?: string | null;
+  notion_page_id?: string | null;
+  notion_page_url?: string | null;
   is_favorite?: boolean;
   memo?: string | null;
   review_status?: string;

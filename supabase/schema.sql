@@ -17,6 +17,8 @@ CREATE TABLE papers (
   explanation_ja TEXT,
   source TEXT NOT NULL DEFAULT 'manual',
   google_drive_url TEXT,
+  notion_page_id TEXT,
+  notion_page_url TEXT,
   is_favorite BOOLEAN NOT NULL DEFAULT FALSE,
   memo TEXT,
   review_status TEXT NOT NULL DEFAULT 'approved',
