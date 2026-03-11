@@ -131,7 +131,7 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
       const data = await res.json();
       setPaper({
         ...paper,
-        notion_page_id: data.notion_page_url ? paper.notion_page_id || "exported" : paper.notion_page_id,
+        notion_page_id: data.notion_page_id || paper.notion_page_id,
         notion_page_url: data.notion_page_url,
       });
       showToast(

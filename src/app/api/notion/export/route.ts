@@ -66,6 +66,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      notion_page_id: result.page_id,
       notion_page_url: result.page_url,
     });
   } catch {
