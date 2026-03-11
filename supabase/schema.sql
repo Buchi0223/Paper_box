@@ -17,6 +17,8 @@ CREATE TABLE papers (
   explanation_ja TEXT,
   source TEXT NOT NULL DEFAULT 'manual',
   google_drive_url TEXT,
+  notion_page_id TEXT,
+  notion_page_url TEXT,
   is_favorite BOOLEAN NOT NULL DEFAULT FALSE,
   memo TEXT,
   review_status TEXT NOT NULL DEFAULT 'approved',
@@ -87,7 +89,8 @@ INSERT INTO review_settings (key, value) VALUES
   ('auto_approve_threshold', '70'),
   ('auto_skip_threshold', '30'),
   ('scoring_enabled', 'true'),
-  ('auto_collect_enabled', 'true');
+  ('auto_collect_enabled', 'true'),
+  ('notion_database_id', '');
 
 -- インデックス
 CREATE INDEX idx_papers_collected_at ON papers(collected_at DESC);
