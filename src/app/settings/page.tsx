@@ -68,6 +68,17 @@ export default function SettingsPage() {
   // スコアリング精度メトリクス
   const [metrics, setMetrics] = useState<ScoringMetrics | null>(null);
 
+  // Notion連携
+  const [notionDatabaseId, setNotionDatabaseId] = useState("");
+  const [notionConfigured, setNotionConfigured] = useState(false);
+  const [isLoadingNotion, setIsLoadingNotion] = useState(true);
+  const [isSavingNotion, setIsSavingNotion] = useState(false);
+  const [isTestingNotion, setIsTestingNotion] = useState(false);
+  const [notionMessage, setNotionMessage] = useState<{
+    text: string;
+    type: "success" | "error";
+  } | null>(null);
+
   const fetchScoringSettings = useCallback(async () => {
     try {
       const res = await fetch("/api/settings/review");
@@ -134,11 +145,78 @@ export default function SettingsPage() {
     }
   }, []);
 
+  const fetchNotionSettings = useCallback(async () => {
+    try {
+      const res = await fetch("/api/notion/settings");
+      if (res.ok) {
+        const data = await res.json();
+        setNotionDatabaseId(data.notion_database_id || "");
+        setNotionConfigured(data.is_configured || false);
+      }
+    } catch {
+      // 取得失敗は無視
+    } finally {
+      setIsLoadingNotion(false);
+    }
+  }, []);
+
+  const handleSaveNotion = async () => {
+    setIsSavingNotion(true);
+    setNotionMessage(null);
+    try {
+      const res = await fetch("/api/notion/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notion_database_id: notionDatabaseId }),
+      });
+      if (res.ok) {
+        setNotionConfigured(notionDatabaseId !== "");
+        setNotionMessage({ text: "Notion設定を保存しました", type: "success" });
+      } else {
+        const data = await res.json();
+        setNotionMessage({
+          text: data.error || "Notion設定の保存に失敗しました",
+          type: "error",
+        });
+      }
+    } catch {
+      setNotionMessage({ text: "Notion設定の保存に失敗しました", type: "error" });
+    } finally {
+      setIsSavingNotion(false);
+      setTimeout(() => setNotionMessage(null), 5000);
+    }
+  };
+
+  const handleTestNotion = async () => {
+    setIsTestingNotion(true);
+    setNotionMessage(null);
+    try {
+      const res = await fetch("/api/notion/settings/test", { method: "POST" });
+      if (res.ok) {
+        setNotionMessage({ text: "Notion接続に成功しました", type: "success" });
+      } else {
+        setNotionMessage({
+          text: "Notion接続に失敗しました。トークンとデータベースIDを確認してください",
+          type: "error",
+        });
+      }
+    } catch {
+      setNotionMessage({
+        text: "Notion接続に失敗しました。トークンとデータベースIDを確認してください",
+        type: "error",
+      });
+    } finally {
+      setIsTestingNotion(false);
+      setTimeout(() => setNotionMessage(null), 5000);
+    }
+  };
+
   useEffect(() => {
     fetchLogs();
     fetchScoringSettings();
     fetchMetrics();
-  }, [fetchLogs, fetchScoringSettings, fetchMetrics]);
+    fetchNotionSettings();
+  }, [fetchLogs, fetchScoringSettings, fetchMetrics, fetchNotionSettings]);
 
   // 手動収集実行
   const handleCollect = async () => {
@@ -593,6 +671,111 @@ export default function SettingsPage() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+      </section>
+
+      {/* Notion連携 */}
+      <section className="rounded-lg border border-gray-200 p-5 dark:border-gray-700">
+        <h2 className="mb-3 text-lg font-semibold text-gray-900 dark:text-white">
+          Notion連携
+        </h2>
+
+        {isLoadingNotion ? (
+          <div className="h-32 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+        ) : (
+          <div className="space-y-4">
+            {/* 接続状態 */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-700 dark:text-gray-300">
+                接続状態:
+              </span>
+              {notionConfigured ? (
+                <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                  ✅ 接続済み
+                </span>
+              ) : (
+                <span className="text-sm font-medium text-red-600 dark:text-red-400">
+                  ❌ 未設定
+                </span>
+              )}
+            </div>
+
+            {/* データベースID入力 */}
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                NotionデータベースID
+              </label>
+              <input
+                type="text"
+                value={notionDatabaseId}
+                onChange={(e) => setNotionDatabaseId(e.target.value)}
+                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
+              />
+            </div>
+
+            {/* ボタン群 */}
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={handleSaveNotion}
+                disabled={isSavingNotion}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {isSavingNotion ? "保存中..." : "設定を保存"}
+              </button>
+              <button
+                onClick={handleTestNotion}
+                disabled={isTestingNotion}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+              >
+                {isTestingNotion ? (
+                  <span className="flex items-center gap-2">
+                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-500 border-t-transparent" />
+                    テスト中...
+                  </span>
+                ) : (
+                  "🔗 接続テスト"
+                )}
+              </button>
+            </div>
+
+            {/* メッセージ */}
+            {notionMessage && (
+              <p
+                className={`text-sm ${
+                  notionMessage.type === "error"
+                    ? "text-red-600 dark:text-red-400"
+                    : "text-green-600 dark:text-green-400"
+                }`}
+              >
+                {notionMessage.text}
+              </p>
+            )}
+
+            {/* 設定手順 */}
+            <details open>
+              <summary className="cursor-pointer text-sm font-medium text-gray-700 dark:text-gray-300">
+                設定手順
+              </summary>
+              <ol className="mt-2 list-inside list-decimal space-y-1 text-sm text-gray-600 dark:text-gray-400">
+                <li>
+                  <a
+                    href="https://www.notion.so/my-integrations"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 underline hover:text-blue-800 dark:text-blue-400"
+                  >
+                    notion.so/my-integrations
+                  </a>{" "}
+                  でインテグレーションを作成
+                </li>
+                <li>NOTION_TOKEN環境変数を設定</li>
+                <li>Notionで論文管理用データベースを作成</li>
+                <li>データベースにインテグレーションを接続</li>
+                <li>データベースIDを上記に入力</li>
+              </ol>
+            </details>
           </div>
         )}
       </section>

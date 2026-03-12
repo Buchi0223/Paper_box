@@ -13,11 +13,90 @@ function getNotionClient(): Client {
   return notionClient;
 }
 
+/**
+ * データベースに必要なプロパティが存在しない場合、自動作成する
+ */
+async function ensureDatabaseProperties(databaseId: string): Promise<void> {
+  const notion = getNotionClient();
+  const db = await notion.databases.retrieve({ database_id: databaseId });
+
+  const props = "properties" in db ? (db.properties as Record<string, { type: string }>) : {};
+  const existing = new Set(Object.keys(props));
+
+  // デフォルトの「名前」プロパティを「タイトル」にリネーム
+  const titleProp = Object.entries(props).find(
+    ([, v]) => v.type === "title",
+  );
+  const titlePropName = titleProp ? titleProp[0] : null;
+
+  // タイトルプロパティのリネームを先に実行
+  if (titlePropName && titlePropName !== "タイトル") {
+    const renameRes = await fetch(`https://api.notion.com/v1/databases/${databaseId}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${process.env.NOTION_TOKEN}`,
+        "Content-Type": "application/json",
+        "Notion-Version": "2022-06-28",
+      },
+      body: JSON.stringify({ properties: { [titlePropName]: { name: "タイトル" } } }),
+    });
+    if (!renameRes.ok) {
+      const err = await renameRes.json();
+      console.error("[Notion] Failed to rename title property:", err);
+    }
+  }
+
+  const propsToCreate: Record<string, unknown> = {};
+
+  const requiredProps: Record<string, unknown> = {
+    "Original Title": { rich_text: {} },
+    Authors: { rich_text: {} },
+    Source: { select: { options: [] } },
+    "PaperShelf ID": { rich_text: {} },
+    ステータス: { select: { options: [{ name: "未読" }, { name: "読了" }] } },
+    "Published Date": { date: {} },
+    Journal: { rich_text: {} },
+    DOI: { url: {} },
+    論文URL: { url: {} },
+    "Google Drive": { url: {} },
+    AIスコア: { number: {} },
+  };
+
+  for (const [name, schema] of Object.entries(requiredProps)) {
+    if (!existing.has(name)) {
+      propsToCreate[name] = schema;
+    }
+  }
+
+  if (Object.keys(propsToCreate).length > 0) {
+    // SDK v5.12.0 の databases.update は bodyParams に properties を含まないため、
+    // 直接 fetch で Notion API を呼ぶ
+    const res = await fetch(`https://api.notion.com/v1/databases/${databaseId}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${process.env.NOTION_TOKEN}`,
+        "Content-Type": "application/json",
+        "Notion-Version": "2022-06-28",
+      },
+      body: JSON.stringify({ properties: propsToCreate }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(`Failed to update database properties: ${err.message}`);
+    }
+  }
+}
+
 export async function exportPaperToNotion(
   paper: Paper,
   databaseId: string,
 ): Promise<{ page_id: string; page_url: string }> {
   const notion = getNotionClient();
+
+  // 初回エクスポート時にプロパティを自動セットアップ
+  if (!paper.notion_page_id) {
+    await ensureDatabaseProperties(databaseId);
+  }
 
   const title = paper.title_ja || paper.title_original;
   const doiUrl = paper.doi ? `https://doi.org/${paper.doi}` : null;
@@ -93,6 +172,34 @@ export async function exportPaperToNotion(
   const pageUrl = "url" in response ? (response.url as string) : "";
 
   return { page_id: response.id, page_url: pageUrl };
+}
+
+const NOTION_TEXT_LIMIT = 2000;
+
+type NotionBlocks = NonNullable<Parameters<typeof Client.prototype.pages.create>[0]["children"]>;
+
+/** 長いテキストを2000文字以下のparagraphブロック群に分割して追加 */
+function pushParagraphBlocks(
+  blocks: NotionBlocks,
+  text: string,
+): void {
+  if (!text) {
+    blocks.push({
+      object: "block" as const,
+      type: "paragraph" as const,
+      paragraph: { rich_text: [{ type: "text" as const, text: { content: "（未生成）" } }] },
+    });
+    return;
+  }
+  for (let i = 0; i < text.length; i += NOTION_TEXT_LIMIT) {
+    blocks.push({
+      object: "block" as const,
+      type: "paragraph" as const,
+      paragraph: {
+        rich_text: [{ type: "text" as const, text: { content: text.slice(i, i + NOTION_TEXT_LIMIT) } }],
+      },
+    });
+  }
 }
 
 function buildPageBlocks(
@@ -192,18 +299,7 @@ function buildPageBlocks(
       rich_text: [{ type: "text" as const, text: { content: "AI要約" } }],
     },
   });
-  blocks.push({
-    object: "block" as const,
-    type: "paragraph" as const,
-    paragraph: {
-      rich_text: [
-        {
-          type: "text" as const,
-          text: { content: paper.summary_ja || "（未生成）" },
-        },
-      ],
-    },
-  });
+  pushParagraphBlocks(blocks, paper.summary_ja || "");
 
   // 7. AI解説
   blocks.push({
@@ -213,18 +309,7 @@ function buildPageBlocks(
       rich_text: [{ type: "text" as const, text: { content: "AI解説" } }],
     },
   });
-  blocks.push({
-    object: "block" as const,
-    type: "paragraph" as const,
-    paragraph: {
-      rich_text: [
-        {
-          type: "text" as const,
-          text: { content: paper.explanation_ja || "（未生成）" },
-        },
-      ],
-    },
-  });
+  pushParagraphBlocks(blocks, paper.explanation_ja || "");
 
   // 8. divider
   blocks.push({
@@ -243,18 +328,7 @@ function buildPageBlocks(
       ],
     },
   });
-  blocks.push({
-    object: "block" as const,
-    type: "paragraph" as const,
-    paragraph: {
-      rich_text: [
-        {
-          type: "text" as const,
-          text: { content: paper.memo || "（メモなし）" },
-        },
-      ],
-    },
-  });
+  pushParagraphBlocks(blocks, paper.memo || "（メモなし）");
 
   // 10. divider
   blocks.push({
@@ -316,7 +390,8 @@ export async function verifyConnection(databaseId: string): Promise<boolean> {
     const notion = getNotionClient();
     await notion.databases.retrieve({ database_id: databaseId });
     return true;
-  } catch {
+  } catch (error) {
+    console.error("[Notion verifyConnection] error:", error);
     return false;
   }
 }

@@ -20,6 +20,8 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
   const [isDeleting, setIsDeleting] = useState(false);
   const [isGeneratingExplanation, setIsGeneratingExplanation] = useState(false);
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
+  const [isExportingNotion, setIsExportingNotion] = useState(false);
+  const [notionConfigured, setNotionConfigured] = useState<boolean | null>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -36,6 +38,19 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
       setIsLoading(false);
     };
     fetchPaper();
+
+    const checkNotionConfig = async () => {
+      try {
+        const res = await fetch("/api/notion/settings");
+        if (res.ok) {
+          const data = await res.json();
+          setNotionConfigured(data.is_configured);
+        }
+      } catch {
+        setNotionConfigured(false);
+      }
+    };
+    checkNotionConfig();
   }, [id]);
 
   const saveMemo = async () => {
@@ -96,6 +111,37 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
       showToast("解説の生成に失敗しました", "error");
     } finally {
       setIsGeneratingExplanation(false);
+    }
+  };
+
+  const handleNotionExport = async () => {
+    if (!paper) return;
+    if (!notionConfigured) {
+      showToast("設定ページからNotionを設定してください", "error");
+      return;
+    }
+    setIsExportingNotion(true);
+    try {
+      const res = await fetch("/api/notion/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paper_id: paper.id }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      const data = await res.json();
+      setPaper({
+        ...paper,
+        notion_page_id: data.notion_page_id || paper.notion_page_id,
+        notion_page_url: data.notion_page_url,
+      });
+      showToast(
+        paper.notion_page_id ? "Notionページを更新しました" : "Notionにエクスポートしました",
+        "success",
+      );
+    } catch {
+      showToast("Notionへのエクスポートに失敗しました", "error");
+    } finally {
+      setIsExportingNotion(false);
     }
   };
 
@@ -218,9 +264,9 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
         </span>
       </div>
 
-      {/* 元論文リンク */}
-      {paper.url && (
-        <div className="mb-6 flex flex-wrap gap-3">
+      {/* アクションボタン */}
+      <div className="mb-6 flex flex-wrap gap-3">
+        {paper.url && (
           <a
             href={paper.url}
             target="_blank"
@@ -237,45 +283,92 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
             </svg>
             元論文を読む
           </a>
-          {paper.google_drive_url ? (
+        )}
+        {paper.google_drive_url ? (
+          <a
+            href={paper.google_drive_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+          >
+            Google Driveで開く
+          </a>
+        ) : (
+          <>
+            <input
+              ref={pdfInputRef}
+              type="file"
+              accept=".pdf,application/pdf"
+              className="hidden"
+              onChange={handlePdfUpload}
+            />
+            <button
+              onClick={() => pdfInputRef.current?.click()}
+              disabled={isUploadingPdf}
+              className="inline-flex items-center gap-2 rounded-lg border border-purple-300 bg-purple-50 px-4 py-2.5 text-sm font-medium text-purple-700 hover:bg-purple-100 disabled:opacity-50 dark:border-purple-600 dark:bg-purple-900/20 dark:text-purple-400 dark:hover:bg-purple-900/30"
+            >
+              {isUploadingPdf ? (
+                <>
+                  <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  アップロード中...
+                </>
+              ) : (
+                "PDFを登録"
+              )}
+            </button>
+          </>
+        )}
+
+        {/* Notionエクスポート */}
+        {paper.notion_page_url ? (
+          <div className="inline-flex items-center gap-2">
             <a
-              href={paper.google_drive_url}
+              href={paper.notion_page_url}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
             >
-              Google Driveで開く
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M4.459 4.208c.746.606 1.026.56 2.428.466l13.215-.793c.28 0 .047-.28-.046-.326L18.29 2.35c-.42-.326-.98-.7-2.055-.607L3.01 2.96c-.466.046-.56.28-.374.466zm.793 3.08v13.904c0 .747.373 1.027 1.214.98l14.523-.84c.84-.046.933-.56.933-1.167V6.354c0-.606-.233-.933-.746-.886l-15.177.84c-.56.047-.747.327-.747.98zm14.337.745c.093.42 0 .84-.42.888l-.7.14v10.264c-.608.327-1.168.514-1.635.514-.747 0-.933-.234-1.494-.933l-4.577-7.186v6.952l1.448.327s0 .84-1.168.84l-3.222.186c-.093-.186 0-.653.327-.726l.84-.233V9.854L7.822 9.76c-.094-.42.14-1.026.793-1.073l3.456-.233 4.764 7.279v-6.44l-1.215-.14c-.093-.513.28-.886.747-.933zM2.877 1.56l13.728-1.02c1.682-.14 2.101.093 2.801.607l3.876 2.707c.467.326.607.747.607 1.213v16.144c0 1.026-.373 1.633-1.681 1.726l-15.458.933c-.98.047-1.448-.093-1.962-.747L1.493 18.96c-.56-.746-.793-1.306-.793-1.96V2.96c0-.84.373-1.353 1.215-1.446z" />
+              </svg>
+              Notionで開く
             </a>
-          ) : (
-            <>
-              <input
-                ref={pdfInputRef}
-                type="file"
-                accept=".pdf,application/pdf"
-                className="hidden"
-                onChange={handlePdfUpload}
-              />
-              <button
-                onClick={() => pdfInputRef.current?.click()}
-                disabled={isUploadingPdf}
-                className="inline-flex items-center gap-2 rounded-lg border border-purple-300 bg-purple-50 px-4 py-2.5 text-sm font-medium text-purple-700 hover:bg-purple-100 disabled:opacity-50 dark:border-purple-600 dark:bg-purple-900/20 dark:text-purple-400 dark:hover:bg-purple-900/30"
-              >
-                {isUploadingPdf ? (
-                  <>
-                    <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    アップロード中...
-                  </>
-                ) : (
-                  "PDFを登録"
-                )}
-              </button>
-            </>
-          )}
-        </div>
-      )}
+            <button
+              onClick={handleNotionExport}
+              disabled={isExportingNotion}
+              className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-50 dark:text-gray-400 dark:hover:text-gray-300"
+            >
+              {isExportingNotion ? "更新中..." : "再エクスポート"}
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={handleNotionExport}
+            disabled={isExportingNotion}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+          >
+            {isExportingNotion ? (
+              <>
+                <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                エクスポート中...
+              </>
+            ) : (
+              <>
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M4.459 4.208c.746.606 1.026.56 2.428.466l13.215-.793c.28 0 .047-.28-.046-.326L18.29 2.35c-.42-.326-.98-.7-2.055-.607L3.01 2.96c-.466.046-.56.28-.374.466zm.793 3.08v13.904c0 .747.373 1.027 1.214.98l14.523-.84c.84-.046.933-.56.933-1.167V6.354c0-.606-.233-.933-.746-.886l-15.177.84c-.56.047-.747.327-.747.98zm14.337.745c.093.42 0 .84-.42.888l-.7.14v10.264c-.608.327-1.168.514-1.635.514-.747 0-.933-.234-1.494-.933l-4.577-7.186v6.952l1.448.327s0 .84-1.168.84l-3.222.186c-.093-.186 0-.653.327-.726l.84-.233V9.854L7.822 9.76c-.094-.42.14-1.026.793-1.073l3.456-.233 4.764 7.279v-6.44l-1.215-.14c-.093-.513.28-.886.747-.933zM2.877 1.56l13.728-1.02c1.682-.14 2.101.093 2.801.607l3.876 2.707c.467.326.607.747.607 1.213v16.144c0 1.026-.373 1.633-1.681 1.726l-15.458.933c-.98.047-1.448-.093-1.962-.747L1.493 18.96c-.56-.746-.793-1.306-.793-1.96V2.96c0-.84.373-1.353 1.215-1.446z" />
+                </svg>
+                Notionにエクスポート
+              </>
+            )}
+          </button>
+        )}
+      </div>
 
       {/* 要約 */}
       {paper.summary_ja && (

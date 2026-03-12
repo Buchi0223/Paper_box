@@ -60,6 +60,11 @@ export default function PaperCard({ paper }: { paper: Paper }) {
               AI推薦
             </span>
           )}
+          {paper.notion_page_id && (
+            <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+              Notion
+            </span>
+          )}
           {paper.memo && (
             <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
               メモあり
