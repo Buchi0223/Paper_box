@@ -137,7 +137,7 @@ export async function exportPaperToNotion(
     properties["AIスコア"] = { number: paper.relevance_score };
   }
 
-  // 再エクスポート: プロパティのみ更新（精読メモを保護）
+  // 再エクスポート: プロパティ更新 + リンクブロック更新（精読メモを保護）
   if (paper.notion_page_id) {
     // ステータスは更新時に上書きしない
     delete properties["ステータス"];
@@ -148,6 +148,9 @@ export async function exportPaperToNotion(
         typeof notion.pages.update
       >[0]["properties"],
     });
+
+    // リンクセクションのブックマークブロックを更新
+    await updateLinkBlocks(paper.notion_page_id, paper, paperShelfUrl);
 
     const page = await notion.pages.retrieve({
       page_id: paper.notion_page_id,
@@ -198,6 +201,84 @@ function pushParagraphBlocks(
       paragraph: {
         rich_text: [{ type: "text" as const, text: { content: text.slice(i, i + NOTION_TEXT_LIMIT) } }],
       },
+    });
+  }
+}
+
+/**
+ * 再エクスポート時に「リンク」セクションのブックマークブロックを差し替える。
+ * ユーザーの精読メモ等は保護したまま、リンクブロックのみ更新する。
+ */
+async function updateLinkBlocks(
+  pageId: string,
+  paper: Paper,
+  paperShelfUrl: string,
+): Promise<void> {
+  const notion = getNotionClient();
+
+  const response = await notion.blocks.children.list({ block_id: pageId });
+  const blocks = response.results as Array<{
+    id: string;
+    type: string;
+    heading_2?: { rich_text: Array<{ plain_text: string }> };
+  }>;
+
+  // 「リンク」見出しのインデックスを検索
+  let linkHeadingIndex = -1;
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
+    if (
+      block.type === "heading_2" &&
+      block.heading_2?.rich_text?.[0]?.plain_text === "リンク"
+    ) {
+      linkHeadingIndex = i;
+      break;
+    }
+  }
+
+  if (linkHeadingIndex === -1) return; // 見出しがなければスキップ
+
+  // 見出し直後のブックマークブロックを収集・削除
+  for (let i = linkHeadingIndex + 1; i < blocks.length; i++) {
+    const block = blocks[i];
+    if (block.type === "heading_2") break; // 次のセクションに到達
+    if (block.type === "bookmark") {
+      try {
+        await notion.blocks.delete({ block_id: block.id });
+      } catch (error) {
+        console.error("[Notion] ブックマークブロック削除失敗:", block.id, error);
+      }
+    }
+  }
+
+  // 新しいブックマークブロックを「リンク」見出しの後に追加
+  const newBookmarks: NotionBlocks = [];
+  if (paper.url) {
+    newBookmarks.push({
+      object: "block" as const,
+      type: "bookmark" as const,
+      bookmark: { url: paper.url, caption: [] },
+    });
+  }
+  if (paper.google_drive_url) {
+    newBookmarks.push({
+      object: "block" as const,
+      type: "bookmark" as const,
+      bookmark: { url: paper.google_drive_url, caption: [] },
+    });
+  }
+  newBookmarks.push({
+    object: "block" as const,
+    type: "bookmark" as const,
+    bookmark: { url: paperShelfUrl, caption: [] },
+  });
+
+  if (newBookmarks.length > 0) {
+    // 「リンク」見出しの直後に挿入（after パラメータ使用）
+    await notion.blocks.children.append({
+      block_id: pageId,
+      after: blocks[linkHeadingIndex].id,
+      children: newBookmarks,
     });
   }
 }

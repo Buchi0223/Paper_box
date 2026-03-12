@@ -134,30 +134,109 @@ export default function NewPaperPage() {
     }
   };
 
+  // アップロード状態
+  const [uploadStatus, setUploadStatus] = useState<
+    "idle" | "uploading" | "success" | "failed"
+  >("idle");
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [showUploadFailDialog, setShowUploadFailDialog] = useState(false);
+  const [pendingSubmitResolve, setPendingSubmitResolve] = useState<
+    ((continueWithout: boolean) => void) | null
+  >(null);
+
   // Google DriveへPDFアップロード
-  const uploadPdf = async (): Promise<string | null> => {
-    if (!pdfFile) return null;
+  type UploadResult =
+    | { status: "success"; url: string }
+    | { status: "failed"; message: string }
+    | { status: "skipped" };
+
+  const uploadPdf = async (): Promise<UploadResult> => {
+    if (!pdfFile) return { status: "skipped" };
     setIsUploading(true);
+    setUploadStatus("uploading");
     try {
       const formData = new FormData();
       formData.append("file", pdfFile);
-      const res = await fetch("/api/drive/upload", { method: "POST", body: formData });
+      const res = await fetch("/api/drive/upload", {
+        method: "POST",
+        body: formData,
+      });
       if (res.ok) {
         const data = await res.json();
-        return data.url;
+        setUploadStatus("success");
+        return { status: "success", url: data.url };
       }
-      // Google Drive未設定時はスキップ
-      return null;
+      const data = await res.json();
+      const errorCode = data.error_code || "unknown";
+      let message: string;
+      switch (errorCode) {
+        case "env_not_configured":
+          message = "Google Driveが設定されていません。";
+          break;
+        case "auth_failed":
+          message = "Google Drive認証に失敗しました。";
+          break;
+        default:
+          message =
+            data.error || "Google Driveへのアップロードに失敗しました。";
+      }
+      setUploadStatus("failed");
+      return { status: "failed", message };
     } catch {
-      return null;
+      setUploadStatus("failed");
+      return {
+        status: "failed",
+        message:
+          "Google Driveへのアップロードに失敗しました。ネットワークを確認してください。",
+      };
     } finally {
       setIsUploading(false);
     }
   };
 
+  // 論文登録の実行（googleDriveUrl指定）
+  const submitPaper = async (googleDriveUrl: string | null) => {
+    const body: Record<string, unknown> = {
+      title_original: form.title_original.trim(),
+      title_ja: (aiEdited.title_ja || form.title_ja).trim() || null,
+      authors: form.authors
+        .split(",")
+        .map((a) => a.trim())
+        .filter(Boolean),
+      published_date: form.published_date || null,
+      journal: form.journal.trim() || null,
+      doi: form.doi.trim() || null,
+      url: form.url.trim() || null,
+      memo: form.memo.trim() || null,
+      google_drive_url: googleDriveUrl,
+      source: "manual",
+    };
+
+    if (aiResult) {
+      body.summary_ja = aiEdited.summary_ja.trim() || null;
+      body.explanation_ja = aiEdited.explanation_ja.trim() || null;
+    }
+
+    const res = await fetch("/api/papers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error || "登録に失敗しました");
+      return;
+    }
+
+    const paper = await res.json();
+    router.push(`/papers/${paper.id}`);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setUploadError(null);
 
     if (!form.title_original.trim()) {
       setError("タイトル（原題）は必須です");
@@ -167,49 +246,32 @@ export default function NewPaperPage() {
     setIsSubmitting(true);
 
     try {
-      // PDFがあればGoogle Driveにアップロード
-      const googleDriveUrl = await uploadPdf();
+      const result = await uploadPdf();
 
-      const body: Record<string, unknown> = {
-        title_original: form.title_original.trim(),
-        title_ja: (aiEdited.title_ja || form.title_ja).trim() || null,
-        authors: form.authors
-          .split(",")
-          .map((a) => a.trim())
-          .filter(Boolean),
-        published_date: form.published_date || null,
-        journal: form.journal.trim() || null,
-        doi: form.doi.trim() || null,
-        url: form.url.trim() || null,
-        memo: form.memo.trim() || null,
-        google_drive_url: googleDriveUrl,
-        source: "manual",
-      };
-
-      // AI結果があれば含める
-      if (aiResult) {
-        body.summary_ja = aiEdited.summary_ja.trim() || null;
-        body.explanation_ja = aiEdited.explanation_ja.trim() || null;
+      if (result.status === "success") {
+        await submitPaper(result.url);
+      } else if (result.status === "failed") {
+        // アップロード失敗：確認ダイアログ表示
+        setUploadError(result.message);
+        setShowUploadFailDialog(true);
+        // ダイアログでの選択を待つ
+        const continueWithout = await new Promise<boolean>((resolve) => {
+          setPendingSubmitResolve(() => resolve);
+        });
+        setShowUploadFailDialog(false);
+        setPendingSubmitResolve(null);
+        if (continueWithout) {
+          await submitPaper(null);
+        }
+      } else {
+        // skipped（PDFなし）
+        await submitPaper(null);
       }
-
-      const res = await fetch("/api/papers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || "登録に失敗しました");
-        return;
-      }
-
-      const paper = await res.json();
-      router.push(`/papers/${paper.id}`);
     } catch {
       setError("登録に失敗しました");
     } finally {
       setIsSubmitting(false);
+      setUploadError(null);
     }
   };
 
@@ -258,9 +320,27 @@ export default function NewPaperPage() {
               </p>
             </div>
           )}
-          {pdfFile && !isParsing && (
+          {pdfFile && !isParsing && uploadStatus === "idle" && (
             <p className="mt-2 text-xs text-green-600 dark:text-green-400">
               {pdfFile.name} を選択済み（Google Drive設定時に自動アップロードされます）
+            </p>
+          )}
+          {uploadStatus === "uploading" && (
+            <div className="mt-2 flex items-center gap-2">
+              <div className="h-3 w-3 animate-spin rounded-full border-2 border-blue-300 border-t-blue-600" />
+              <p className="text-xs text-blue-600 dark:text-blue-400">
+                Google Driveにアップロード中...
+              </p>
+            </div>
+          )}
+          {uploadStatus === "success" && (
+            <p className="mt-2 text-xs text-green-600 dark:text-green-400">
+              Google Driveにアップロード完了
+            </p>
+          )}
+          {uploadStatus === "failed" && !showUploadFailDialog && (
+            <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+              アップロードに失敗しました
             </p>
           )}
         </div>
@@ -492,6 +572,39 @@ export default function NewPaperPage() {
           </Link>
         </div>
       </form>
+
+      {/* アップロード失敗確認ダイアログ */}
+      {showUploadFailDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="mx-4 max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
+            <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
+              Google Driveへのアップロードに失敗しました
+            </h3>
+            <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+              {uploadError}
+            </p>
+            <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+              PDFなしで論文を登録しますか？
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => pendingSubmitResolve?.(false)}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={() => pendingSubmitResolve?.(true)}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                PDFなしで登録
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
