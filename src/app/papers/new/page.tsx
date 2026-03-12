@@ -20,6 +20,16 @@ export default function NewPaperPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [pdfText, setPdfText] = useState<string>("");
 
+  // アップロード状態
+  const [uploadStatus, setUploadStatus] = useState<
+    "idle" | "uploading" | "success" | "failed"
+  >("idle");
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [showUploadFailDialog, setShowUploadFailDialog] = useState(false);
+  const [pendingSubmitResolve, setPendingSubmitResolve] = useState<
+    ((continueWithout: boolean) => void) | null
+  >(null);
+
   // AI処理関連
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [aiResult, setAiResult] = useState<AiResult>(null);
@@ -51,6 +61,7 @@ export default function NewPaperPage() {
     setPdfFile(file);
     setIsParsing(true);
     setError(null);
+    setUploadStatus("idle");
 
     try {
       const formData = new FormData();
@@ -133,16 +144,6 @@ export default function NewPaperPage() {
       setIsAiProcessing(false);
     }
   };
-
-  // アップロード状態
-  const [uploadStatus, setUploadStatus] = useState<
-    "idle" | "uploading" | "success" | "failed"
-  >("idle");
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [showUploadFailDialog, setShowUploadFailDialog] = useState(false);
-  const [pendingSubmitResolve, setPendingSubmitResolve] = useState<
-    ((continueWithout: boolean) => void) | null
-  >(null);
 
   // Google DriveへPDFアップロード
   type UploadResult =
@@ -308,7 +309,7 @@ export default function NewPaperPage() {
           </label>
           <input
             type="file"
-            accept=".pdf"
+            accept=".pdf,application/pdf,application/x-pdf"
             onChange={handlePdfSelect}
             className="block w-full text-sm text-gray-500 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100 dark:text-gray-400 dark:file:bg-blue-900/30 dark:file:text-blue-400"
           />

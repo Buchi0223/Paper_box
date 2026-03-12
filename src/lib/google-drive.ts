@@ -23,7 +23,6 @@ function getAuth() {
 
   try {
     const key = JSON.parse(keyJson);
-    console.log("[Google Drive] 認証情報の読み込み成功");
     return new google.auth.GoogleAuth({
       credentials: key,
       scopes: ["https://www.googleapis.com/auth/drive.file"],

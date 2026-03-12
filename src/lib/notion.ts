@@ -238,7 +238,9 @@ async function updateLinkBlocks(
 
   if (linkHeadingIndex === -1) return; // 見出しがなければスキップ
 
-  // 見出し直後のブックマークブロックを収集・削除
+  // 見出し直後のブックマークブロックを収集・削除し、挿入位置を特定
+  // 最後に削除したブックマークの1つ前のブロック（= heading自身 or 非bookmarkブロック）を記録
+  let insertAfterId = blocks[linkHeadingIndex].id;
   for (let i = linkHeadingIndex + 1; i < blocks.length; i++) {
     const block = blocks[i];
     if (block.type === "heading_2") break; // 次のセクションに到達
@@ -248,6 +250,9 @@ async function updateLinkBlocks(
       } catch (error) {
         console.error("[Notion] ブックマークブロック削除失敗:", block.id, error);
       }
+    } else {
+      // bookmark以外のブロック（divider等）は保持し、その手前までが挿入対象
+      break;
     }
   }
 
@@ -274,10 +279,9 @@ async function updateLinkBlocks(
   });
 
   if (newBookmarks.length > 0) {
-    // 「リンク」見出しの直後に挿入（after パラメータ使用）
     await notion.blocks.children.append({
       block_id: pageId,
-      after: blocks[linkHeadingIndex].id,
+      after: insertAfterId,
       children: newBookmarks,
     });
   }
