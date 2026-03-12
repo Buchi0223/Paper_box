@@ -47,8 +47,10 @@ export async function PATCH(request: NextRequest) {
   if (databaseId === "") {
     const { error } = await supabase
       .from("review_settings")
-      .update({ value: "", updated_at: new Date().toISOString() })
-      .eq("key", "notion_database_id");
+      .upsert(
+        { key: "notion_database_id", value: "", updated_at: new Date().toISOString() },
+        { onConflict: "key" },
+      );
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -71,8 +73,10 @@ export async function PATCH(request: NextRequest) {
 
   const { error } = await supabase
     .from("review_settings")
-    .update({ value: databaseId, updated_at: new Date().toISOString() })
-    .eq("key", "notion_database_id");
+    .upsert(
+      { key: "notion_database_id", value: databaseId, updated_at: new Date().toISOString() },
+      { onConflict: "key" },
+    );
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
