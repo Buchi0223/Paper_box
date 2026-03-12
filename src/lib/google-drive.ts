@@ -76,6 +76,7 @@ export async function uploadToDrive(
         body: Readable.from(fileBuffer),
       },
       fields: "id, webViewLink",
+      supportsAllDrives: true,
     });
     console.log("[Google Drive] ファイル作成成功:", {
       fileId: response.data.id,
@@ -97,6 +98,7 @@ export async function uploadToDrive(
           role: "reader",
           type: "anyone",
         },
+        supportsAllDrives: true,
       });
       console.log("[Google Drive] 共有設定成功:", {
         fileId: response.data.id,
