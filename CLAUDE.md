@@ -32,6 +32,7 @@ src/
 │   │   ├── keywords/  # キーワード管理
 │   │   ├── papers/    # 論文CRUD
 │   │   ├── pdf/       # PDF解析
+│   │   ├── notion/    # Notion連携（エクスポート・設定）
 │   │   ├── scoring/   # スコアリング診断・再スコアリング
 │   │   └── settings/  # レビュー設定
 │   ├── favorites/    # お気に入り一覧ページ
@@ -53,6 +54,7 @@ src/
 │   ├── semantic-scholar.ts # Semantic Scholar API連携
 │   ├── rss.ts          # RSSパーサー
 │   ├── google-drive.ts # Google Drive連携
+│   ├── notion.ts       # Notion API連携
 │   └── interest-learner.ts # 関心学習
 └── types/
     └── database.ts   # DB型定義
@@ -67,7 +69,7 @@ supabase/
 - `rss_feeds` — RSSフィード登録
 - `collection_logs` — 収集実行ログ
 - `interests` — 関心プロファイル
-- `review_settings` — スコアリング閾値・機能設定
+- `review_settings` — スコアリング閾値・機能設定・Notion連携設定（`notion_database_id`）
 
 ## 環境変数
 必要な環境変数（`.env.local`）:
