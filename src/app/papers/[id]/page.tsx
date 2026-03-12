@@ -22,6 +22,7 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
   const [isExportingNotion, setIsExportingNotion] = useState(false);
   const [notionConfigured, setNotionConfigured] = useState<boolean | null>(null);
+  const [showNotionReexportPrompt, setShowNotionReexportPrompt] = useState(false);
   const pdfInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -157,7 +158,21 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
         method: "POST",
         body: formData,
       });
-      if (!uploadRes.ok) throw new Error("Upload failed");
+      if (!uploadRes.ok) {
+        const data = await uploadRes.json();
+        const errorCode = data.error_code || "unknown";
+        switch (errorCode) {
+          case "env_not_configured":
+            showToast("Google Driveが設定されていません", "error");
+            break;
+          case "auth_failed":
+            showToast("Google Drive認証に失敗しました", "error");
+            break;
+          default:
+            showToast("PDFの登録に失敗しました", "error");
+        }
+        return;
+      }
       const { url } = await uploadRes.json();
 
       const patchRes = await fetch(`/api/papers/${paper.id}`, {
@@ -169,7 +184,13 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
       const updatedPaper = await patchRes.json();
 
       setPaper(updatedPaper);
-      showToast("PDFを登録しました", "success");
+      const isReplace = !!paper.google_drive_url;
+      showToast(isReplace ? "PDFを差し替えました" : "PDFを登録しました", "success");
+
+      // Notionエクスポート済みの場合は再エクスポートを促す
+      if (paper.notion_page_id) {
+        setShowNotionReexportPrompt(true);
+      }
     } catch {
       showToast("PDFの登録に失敗しました", "error");
     } finally {
@@ -284,7 +305,14 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
             元論文を読む
           </a>
         )}
-        {paper.google_drive_url ? (
+        <input
+          ref={pdfInputRef}
+          type="file"
+          accept=".pdf,application/pdf,application/x-pdf"
+          className="hidden"
+          onChange={handlePdfUpload}
+        />
+        {paper.google_drive_url && (
           <a
             href={paper.google_drive_url}
             target="_blank"
@@ -293,34 +321,26 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
           >
             Google Driveで開く
           </a>
-        ) : (
-          <>
-            <input
-              ref={pdfInputRef}
-              type="file"
-              accept=".pdf,application/pdf"
-              className="hidden"
-              onChange={handlePdfUpload}
-            />
-            <button
-              onClick={() => pdfInputRef.current?.click()}
-              disabled={isUploadingPdf}
-              className="inline-flex items-center gap-2 rounded-lg border border-purple-300 bg-purple-50 px-4 py-2.5 text-sm font-medium text-purple-700 hover:bg-purple-100 disabled:opacity-50 dark:border-purple-600 dark:bg-purple-900/20 dark:text-purple-400 dark:hover:bg-purple-900/30"
-            >
-              {isUploadingPdf ? (
-                <>
-                  <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  アップロード中...
-                </>
-              ) : (
-                "PDFを登録"
-              )}
-            </button>
-          </>
         )}
+        <button
+          onClick={() => pdfInputRef.current?.click()}
+          disabled={isUploadingPdf}
+          className="inline-flex items-center gap-2 rounded-lg border border-purple-300 bg-purple-50 px-4 py-2.5 text-sm font-medium text-purple-700 hover:bg-purple-100 disabled:opacity-50 dark:border-purple-600 dark:bg-purple-900/20 dark:text-purple-400 dark:hover:bg-purple-900/30"
+        >
+          {isUploadingPdf ? (
+            <>
+              <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              アップロード中...
+            </>
+          ) : paper.google_drive_url ? (
+            "PDFを差し替え"
+          ) : (
+            "PDFを登録"
+          )}
+        </button>
 
         {/* Notionエクスポート */}
         {paper.notion_page_url ? (
@@ -369,6 +389,33 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
           </button>
         )}
       </div>
+
+      {/* Notion再エクスポート促し */}
+      {showNotionReexportPrompt && (
+        <div className="mb-6 flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+          <p className="text-sm text-blue-700 dark:text-blue-400">
+            NotionページにDriveリンクを反映するには再エクスポートしてください。
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={async () => {
+                setShowNotionReexportPrompt(false);
+                await handleNotionExport();
+              }}
+              disabled={isExportingNotion}
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isExportingNotion ? "更新中..." : "再エクスポート"}
+            </button>
+            <button
+              onClick={() => setShowNotionReexportPrompt(false)}
+              className="rounded-lg border border-blue-300 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 dark:border-blue-600 dark:text-blue-400"
+            >
+              後で
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 要約 */}
       {paper.summary_ja && (
