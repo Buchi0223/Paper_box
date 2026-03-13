@@ -20,6 +20,7 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
   const [isDeleting, setIsDeleting] = useState(false);
   const [isGeneratingExplanation, setIsGeneratingExplanation] = useState(false);
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
+  const [driveNotConnected, setDriveNotConnected] = useState(false);
   const [isExportingNotion, setIsExportingNotion] = useState(false);
   const [notionConfigured, setNotionConfigured] = useState<boolean | null>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
@@ -150,6 +151,7 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
     if (!file || !paper) return;
 
     setIsUploadingPdf(true);
+    setDriveNotConnected(false);
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -157,7 +159,14 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
         method: "POST",
         body: formData,
       });
-      if (!uploadRes.ok) throw new Error("Upload failed");
+      if (!uploadRes.ok) {
+        const errData = await uploadRes.json().catch(() => null);
+        if (errData?.error_code === "env_not_configured") {
+          setDriveNotConnected(true);
+          return;
+        }
+        throw new Error("Upload failed");
+      }
       const { url } = await uploadRes.json();
 
       const patchRes = await fetch(`/api/papers/${paper.id}`, {
@@ -369,6 +378,24 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
           </button>
         )}
       </div>
+
+      {/* Google Drive未接続案内 */}
+      {driveNotConnected && (
+        <div className="mb-6 rounded-lg border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-800 dark:bg-yellow-900/20">
+          <p className="text-sm font-medium text-yellow-800 dark:text-yellow-300">
+            Google Driveに接続されていません
+          </p>
+          <p className="mt-1 text-xs text-yellow-700 dark:text-yellow-400">
+            PDFをアップロードするには、Google Driveアカウントを接続してください。
+          </p>
+          <a
+            href={`/api/auth/google?returnTo=/papers/${id}`}
+            className="mt-2 inline-block rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+          >
+            Google Driveに接続
+          </a>
+        </div>
+      )}
 
       {/* 要約 */}
       {paper.summary_ja && (

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import GoogleDriveStatus from "@/components/GoogleDriveStatus";
 
 type CollectionLog = {
   id: string;
@@ -673,6 +674,14 @@ export default function SettingsPage() {
             ))}
           </div>
         )}
+      </section>
+
+      {/* Google Drive連携 */}
+      <section className="rounded-lg border border-gray-200 p-5 dark:border-gray-700">
+        <h2 className="mb-3 text-lg font-semibold text-gray-900 dark:text-white">
+          Google Drive連携
+        </h2>
+        <GoogleDriveStatus variant="settings" />
       </section>
 
       {/* Notion連携 */}

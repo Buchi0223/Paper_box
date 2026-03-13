@@ -19,6 +19,7 @@ export default function NewPaperPage() {
   const [isParsing, setIsParsing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [pdfText, setPdfText] = useState<string>("");
+  const [driveNotConnected, setDriveNotConnected] = useState(false);
 
   // AI処理関連
   const [isAiProcessing, setIsAiProcessing] = useState(false);
@@ -138,6 +139,7 @@ export default function NewPaperPage() {
   const uploadPdf = async (): Promise<string | null> => {
     if (!pdfFile) return null;
     setIsUploading(true);
+    setDriveNotConnected(false);
     try {
       const formData = new FormData();
       formData.append("file", pdfFile);
@@ -146,7 +148,11 @@ export default function NewPaperPage() {
         const data = await res.json();
         return data.url;
       }
-      // Google Drive未設定時はスキップ
+      // env_not_configured の場合は接続案内を表示
+      const errData = await res.json().catch(() => null);
+      if (errData?.error_code === "env_not_configured") {
+        setDriveNotConnected(true);
+      }
       return null;
     } catch {
       return null;
@@ -262,6 +268,22 @@ export default function NewPaperPage() {
             <p className="mt-2 text-xs text-green-600 dark:text-green-400">
               {pdfFile.name} を選択済み（Google Drive設定時に自動アップロードされます）
             </p>
+          )}
+          {driveNotConnected && (
+            <div className="mt-3 rounded-lg border border-yellow-200 bg-yellow-50 p-3 dark:border-yellow-800 dark:bg-yellow-900/20">
+              <p className="text-sm font-medium text-yellow-800 dark:text-yellow-300">
+                Google Driveに接続されていません
+              </p>
+              <p className="mt-1 text-xs text-yellow-700 dark:text-yellow-400">
+                PDFをアップロードするには、Google Driveアカウントを接続してください。
+              </p>
+              <a
+                href="/api/auth/google?returnTo=/papers/new"
+                className="mt-2 inline-block rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+              >
+                Google Driveに接続
+              </a>
+            </div>
           )}
         </div>
 

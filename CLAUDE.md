@@ -24,6 +24,7 @@ src/
 ├── app/              # Next.js App Router ページ・APIルート
 │   ├── api/          # APIエンドポイント
 │   │   ├── ai/        # AI要約・解説生成
+│   │   ├── auth/      # Google OAuth認証（接続・コールバック・ステータス・切断）
 │   │   ├── collect/   # 論文収集トリガー
 │   │   ├── cron/      # Vercel Cron（定期自動収集）
 │   │   ├── drive/     # Google Drive連携
@@ -53,7 +54,8 @@ src/
 │   ├── openalex.ts     # OpenAlex API連携
 │   ├── semantic-scholar.ts # Semantic Scholar API連携
 │   ├── rss.ts          # RSSパーサー
-│   ├── google-drive.ts # Google Drive連携
+│   ├── google-drive.ts # Google Drive連携（OAuth/サービスアカウント デュアルモード認証）
+│   ├── google-oauth.ts # Google OAuth 2.0ヘルパー（トークン管理・認証URL生成）
 │   ├── notion.ts       # Notion API連携
 │   └── interest-learner.ts # 関心学習
 └── types/
@@ -69,13 +71,15 @@ supabase/
 - `rss_feeds` — RSSフィード登録
 - `collection_logs` — 収集実行ログ
 - `interests` — 関心プロファイル
-- `review_settings` — スコアリング閾値・機能設定・Notion連携設定（`notion_database_id`）
+- `review_settings` — スコアリング閾値・機能設定・Notion連携設定・Google OAuth トークン
 
 ## 環境変数
 必要な環境変数（`.env.local`）:
 - `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Supabase接続
 - `GEMINI_API_KEY` — Gemini AI API
-- `GOOGLE_DRIVE_FOLDER_ID` / Google Drive認証情報 — Google Drive連携
+- `GOOGLE_DRIVE_FOLDER_ID` — Google Drive保存先フォルダID
+- `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` — Google OAuth 2.0クライアント認証情報
+- `GOOGLE_SERVICE_ACCOUNT_KEY` — サービスアカウント認証情報（オプション、OAuth未接続時のフォールバック）
 - `CRON_SECRET` — Vercel Cronの認証
 - `NOTION_TOKEN` — Notion Internal Integration Token（Notion連携）
 

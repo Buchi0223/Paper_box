@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import DarkModeToggle from "./DarkModeToggle";
+import GoogleDriveStatus from "./GoogleDriveStatus";
 
 const navItems = [
   { href: "/", label: "論文一覧" },
@@ -46,11 +47,13 @@ export default function Header() {
               </Link>
             );
           })}
+          <GoogleDriveStatus variant="header" />
           <DarkModeToggle />
         </nav>
 
-        {/* モバイル：ダークモード + ハンバーガー */}
+        {/* モバイル：Drive + ダークモード + ハンバーガー */}
         <div className="flex items-center gap-1 md:hidden">
+          <GoogleDriveStatus variant="header" />
           <DarkModeToggle />
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
