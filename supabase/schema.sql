@@ -90,7 +90,10 @@ INSERT INTO review_settings (key, value) VALUES
   ('auto_skip_threshold', '30'),
   ('scoring_enabled', 'true'),
   ('auto_collect_enabled', 'true'),
-  ('notion_database_id', '');
+  ('notion_database_id', ''),
+  ('google_drive_refresh_token', ''),  -- Google OAuth refresh token
+  ('google_drive_email', '')           -- Connected Google account email
+ON CONFLICT (key) DO NOTHING;
 
 -- インデックス
 CREATE INDEX idx_papers_collected_at ON papers(collected_at DESC);

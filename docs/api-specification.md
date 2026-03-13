@@ -666,11 +666,106 @@ PDFファイルをGoogle Driveにアップロードする。
 }
 ```
 
-**エラーレスポンス** `400 Bad Request` — PDF以外のファイル
+**エラーレスポンス**
+
+- `400 Bad Request` — PDF以外のファイル
+- `500 Internal Server Error` — Google Drive認証エラー
+
+```json
+{
+  "error": "エラーメッセージ",
+  "error_code": "env_not_configured"
+}
+```
+
+**エラーコード一覧**
+
+| コード | 説明 |
+|--------|------|
+| `env_not_configured` | OAuth未接続かつサービスアカウント未設定 |
+| `invalid_config` | サービスアカウント設定が不正 |
+
+**備考**: OAuth認証優先、未接続時はサービスアカウントにフォールバック。両方未設定の場合は `env_not_configured` エラー。
 
 ---
 
-## 9. 論文収集 (Collection)
+## 9. Google OAuth認証 (Auth)
+
+### GET /api/auth/google
+
+Google OAuth 2.0 認証を開始する。Googleの同意画面へリダイレクトする。
+
+**クエリパラメータ**
+
+| パラメータ | 型 | デフォルト | 説明 |
+|---|---|---|---|
+| `returnTo` | string | `/settings` | 認証完了後のリダイレクト先（相対パスのみ） |
+
+**レスポンス** `302 Found` — Google OAuth 同意画面へリダイレクト
+
+**エラーレスポンス** `302 Found` — `/settings?error=google_auth_failed` へリダイレクト
+
+**備考**: `returnTo` が相対パスでない場合はオープンリダイレクト防止のため `/settings` にフォールバックする。
+
+---
+
+### GET /api/auth/google/callback
+
+Google OAuth コールバック。認証コードをトークンに交換し、DBに保存する。
+
+**クエリパラメータ**
+
+| パラメータ | 型 | 説明 |
+|---|---|---|
+| `code` | string | Google OAuth 認証コード |
+| `state` | string | リダイレクト先パス（`returnTo` から引き継ぎ） |
+
+**レスポンス** `302 Found` — `state` で指定されたパスへリダイレクト
+
+**エラーレスポンス** `302 Found` — `/settings?error=google_auth_failed` へリダイレクト
+
+**副作用**: `review_settings` テーブルに `google_drive_refresh_token` と `google_drive_email` を保存。
+
+---
+
+### GET /api/auth/google/status
+
+Google Drive の接続状態を取得する。
+
+**レスポンス** `200 OK`
+
+```json
+{
+  "connected": true,
+  "email": "user@gmail.com"
+}
+```
+
+**備考**: トークンが存在しない場合は `{ "connected": false, "email": null }` を返す。
+
+---
+
+### POST /api/auth/google/disconnect
+
+Google Drive 接続を解除する。トークンを失効させ、DBから削除する。
+
+**レスポンス** `200 OK`
+
+```json
+{ "success": true }
+```
+
+**エラーレスポンス** `500 Internal Server Error`
+
+```json
+{ "error": "切断に失敗しました" }
+```
+
+**副作用**: Google APIでトークンを失効させ、`review_settings` から `google_drive_refresh_token` と `google_drive_email` をクリアする。
+
+---
+
+## 10. 論文収集 (Collection)
 
 ### POST /api/collect
 
@@ -743,7 +838,7 @@ PDFファイルをGoogle Driveにアップロードする。
 
 ---
 
-## 10. Cron (定期自動収集)
+## 11. Cron (定期自動収集)
 
 ### GET / POST /api/cron/collect
 
@@ -784,7 +879,7 @@ Vercel Cronから毎日06:00 UTCに呼び出される自動収集エンドポイ
 
 ---
 
-## 11. 設定 (Settings)
+## 12. 設定 (Settings)
 
 ### GET /api/settings/review
 
@@ -844,7 +939,7 @@ Vercel Cronから毎日06:00 UTCに呼び出される自動収集エンドポイ
 
 ---
 
-## 12. スコアリング診断 (Scoring)
+## 13. スコアリング診断 (Scoring)
 
 ### GET /api/scoring/test
 
@@ -923,7 +1018,7 @@ Vercel Cronから毎日06:00 UTCに呼び出される自動収集エンドポイ
 
 ---
 
-## 13. Notion連携 (Notion)
+## 14. Notion連携 (Notion)
 
 ### GET /api/notion/settings
 
@@ -1043,6 +1138,10 @@ Notion接続テストを実行する。
 | POST | `/api/ai/explain` | AI解説生成 |
 | POST | `/api/pdf/parse` | PDF解析 |
 | POST | `/api/drive/upload` | Google Driveアップロード |
+| GET | `/api/auth/google` | Google OAuth認証開始 |
+| GET | `/api/auth/google/callback` | Google OAuthコールバック |
+| GET | `/api/auth/google/status` | Google Drive接続状態取得 |
+| POST | `/api/auth/google/disconnect` | Google Drive接続解除 |
 | POST | `/api/collect` | 手動収集 |
 | GET | `/api/collect/logs` | 収集ログ取得 |
 | GET/POST | `/api/cron/collect` | 定期自動収集 |
