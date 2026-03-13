@@ -15,6 +15,7 @@ export default function GoogleDriveStatus({
   const [email, setEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [disconnectError, setDisconnectError] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -42,6 +43,7 @@ export default function GoogleDriveStatus({
   const handleDisconnect = async () => {
     if (!confirm("Google Drive接続を解除しますか？")) return;
     setDisconnecting(true);
+    setDisconnectError(false);
     try {
       const res = await fetch("/api/auth/google/disconnect", {
         method: "POST",
@@ -49,9 +51,11 @@ export default function GoogleDriveStatus({
       if (res.ok) {
         setConnected(false);
         setEmail(null);
+      } else {
+        setDisconnectError(true);
       }
     } catch {
-      // 切断失敗
+      setDisconnectError(true);
     } finally {
       setDisconnecting(false);
     }
@@ -65,6 +69,7 @@ export default function GoogleDriveStatus({
       <button
         onClick={connected ? handleDisconnect : handleConnect}
         disabled={disconnecting}
+        aria-label={connected ? "Google Drive接続を解除" : "Google Driveに接続"}
         title={
           connected
             ? `Google Drive: ${email || "接続済み"}（クリックで切断）`
@@ -73,6 +78,7 @@ export default function GoogleDriveStatus({
         className="rounded-lg p-2 transition-colors hover:bg-gray-100 disabled:opacity-50 dark:hover:bg-gray-800"
       >
         <svg
+          aria-hidden="true"
           className={`h-5 w-5 ${
             connected
               ? "text-green-600 dark:text-green-400"
@@ -126,6 +132,12 @@ export default function GoogleDriveStatus({
         >
           Google Driveに接続
         </button>
+      )}
+
+      {disconnectError && (
+        <p className="text-sm text-red-600 dark:text-red-400">
+          切断に失敗しました。もう一度お試しください。
+        </p>
       )}
 
       <p className="text-xs text-gray-500 dark:text-gray-400">
