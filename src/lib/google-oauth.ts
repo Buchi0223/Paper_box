@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import type { OAuth2Client } from "google-auth-library";
 import { supabase } from "@/lib/supabase";
 
 const SCOPES = [
@@ -103,7 +104,7 @@ export async function saveTokens(
  * DBからリフレッシュトークンを取得し、認証済み OAuth2 クライアントを返す
  * 未設定の場合は null を返す
  */
-export async function getStoredAuth() {
+export async function getStoredAuth(): Promise<OAuth2Client | null> {
   const { data, error } = await supabase
     .from("review_settings")
     .select("key, value")
@@ -142,17 +143,25 @@ export async function revokeAndClear(): Promise<void> {
 
   const now = new Date().toISOString();
 
-  await supabase
+  const { error: tokenError } = await supabase
     .from("review_settings")
     .upsert(
       { key: "google_drive_refresh_token", value: "", updated_at: now },
       { onConflict: "key" },
     );
 
-  await supabase
+  if (tokenError) {
+    console.error("[Google OAuth] Failed to clear refresh token:", tokenError.message);
+  }
+
+  const { error: emailError } = await supabase
     .from("review_settings")
     .upsert(
       { key: "google_drive_email", value: "", updated_at: now },
       { onConflict: "key" },
     );
+
+  if (emailError) {
+    console.error("[Google OAuth] Failed to clear email:", emailError.message);
+  }
 }
