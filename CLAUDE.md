@@ -24,9 +24,9 @@ src/
 ├── app/              # Next.js App Router ページ・APIルート
 │   ├── api/          # APIエンドポイント
 │   │   ├── ai/        # AI要約・解説生成
+│   │   ├── auth/      # Google OAuth認証（接続・コールバック・ステータス・切断）
 │   │   ├── collect/   # 論文収集トリガー
 │   │   ├── cron/      # Vercel Cron（定期自動収集）
-│   │   ├── auth/       # Google OAuth認証（接続・コールバック・ステータス・切断）
 │   │   ├── drive/     # Google Drive連携
 │   │   ├── feeds/     # RSSフィード管理
 │   │   ├── interests/ # 関心プロファイル管理
