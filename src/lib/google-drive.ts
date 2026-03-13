@@ -34,12 +34,19 @@ async function getAuth(): Promise<AuthResult> {
   // 2. サービスアカウントにフォールバック
   const keyJson = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
   if (keyJson) {
-    const key = JSON.parse(keyJson);
-    const googleAuth = new google.auth.GoogleAuth({
-      credentials: key,
-      scopes: ["https://www.googleapis.com/auth/drive.file"],
-    });
-    return { auth: googleAuth, isOAuth: false };
+    try {
+      const key = JSON.parse(keyJson);
+      const googleAuth = new google.auth.GoogleAuth({
+        credentials: key,
+        scopes: ["https://www.googleapis.com/auth/drive.file"],
+      });
+      return { auth: googleAuth, isOAuth: false };
+    } catch {
+      throw new DriveUploadError(
+        "GOOGLE_SERVICE_ACCOUNT_KEY の形式が不正です",
+        "invalid_config",
+      );
+    }
   }
 
   // 3. どちらもない

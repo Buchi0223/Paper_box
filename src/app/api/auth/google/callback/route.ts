@@ -6,7 +6,9 @@ import { exchangeCode, saveTokens } from "@/lib/google-oauth";
  */
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
-  const state = request.nextUrl.searchParams.get("state") || "/settings";
+  const rawState = request.nextUrl.searchParams.get("state") || "/settings";
+  // オープンリダイレクト防止: 相対パスのみ許可
+  const state = rawState.startsWith("/") ? rawState : "/settings";
 
   if (!code) {
     console.error("[Google OAuth] Callback missing code parameter");

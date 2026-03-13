@@ -6,7 +6,9 @@ import { getAuthUrl } from "@/lib/google-oauth";
  */
 export async function GET(request: NextRequest) {
   try {
-    const returnTo = request.nextUrl.searchParams.get("returnTo") || "/settings";
+    const rawReturnTo = request.nextUrl.searchParams.get("returnTo") || "/settings";
+    // オープンリダイレクト防止: 相対パスのみ許可
+    const returnTo = rawReturnTo.startsWith("/") ? rawReturnTo : "/settings";
     const authUrl = getAuthUrl(returnTo);
     return NextResponse.redirect(authUrl);
   } catch (error) {
