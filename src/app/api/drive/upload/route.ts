@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { uploadToDrive } from "@/lib/google-drive";
+import { uploadToDrive, DriveUploadError } from "@/lib/google-drive";
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,6 +19,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ url: driveUrl });
   } catch (error) {
+    if (error instanceof DriveUploadError) {
+      return NextResponse.json(
+        { error: error.message, error_code: error.code },
+        { status: 500 },
+      );
+    }
     const message = error instanceof Error ? error.message : "アップロードに失敗しました";
     return NextResponse.json({ error: message }, { status: 500 });
   }
