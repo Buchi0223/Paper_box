@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { extractMetadata } from "@/lib/ai";
+import { extractMetadata, extractMetadataFromPdf } from "@/lib/ai";
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,8 +19,8 @@ export async function POST(request: NextRequest) {
     const pdfData = await pdfParse(buffer);
 
     const text = (pdfData.text || "") as string;
+    const isTextSufficient = text.length > 50;
 
-    // AIでメタデータを構造化抽出
     let metadata = {
       title: "",
       authors: [] as string[],
@@ -29,20 +29,40 @@ export async function POST(request: NextRequest) {
       doi: null as string | null,
       abstract: null as string | null,
     };
+    let extractedText = text;
+    let ocrUsed = false;
 
-    if (text.length > 50) {
+    if (isTextSufficient) {
+      // テキストベースPDF: 従来のテキスト抽出 → AIメタデータ抽出
       try {
         metadata = await extractMetadata(text);
       } catch (e) {
         console.error("[PDF Parse] AI metadata extraction failed:", e);
-        // AI抽出失敗時はPDFメタデータにフォールバック
+      }
+    } else {
+      // スキャンPDF: Geminiマルチモーダルでテキスト+メタデータを一括抽出
+      console.log("[PDF Parse] テキスト不足 (%d文字)、Geminiマルチモーダルにフォールバック", text.length);
+      try {
+        const result = await extractMetadataFromPdf(buffer);
+        metadata = {
+          title: result.title,
+          authors: result.authors,
+          journal: result.journal,
+          published_date: result.published_date,
+          doi: result.doi,
+          abstract: result.abstract,
+        };
+        extractedText = result.text || text;
+        ocrUsed = true;
+      } catch (e) {
+        console.error("[PDF Parse] Geminiマルチモーダル抽出失敗:", e);
       }
     }
 
     // AIで取得できなかった場合はPDFメタデータにフォールバック
     const info = pdfData.info || {};
     if (!metadata.title) {
-      const lines = text.split("\n").filter((l: string) => l.trim().length > 0);
+      const lines = extractedText.split("\n").filter((l: string) => l.trim().length > 0);
       metadata.title = info.Title || lines[0]?.trim() || "";
     }
     if (metadata.authors.length === 0 && info.Author) {
@@ -56,8 +76,9 @@ export async function POST(request: NextRequest) {
       published_date: metadata.published_date,
       doi: metadata.doi,
       abstract: metadata.abstract,
-      text: text.slice(0, 12000),
+      text: extractedText.slice(0, 12000),
       pages: pdfData.numpages,
+      ocr_used: ocrUsed,
     });
   } catch (error) {
     console.error("[PDF Parse Error]", error);
