@@ -249,6 +249,80 @@ export async function extractMetadata(text: string): Promise<{
   }
 }
 
+// PDFバイナリ（スキャンPDF含む）からGeminiマルチモーダルでメタデータ・テキストを抽出
+export async function extractMetadataFromPdf(pdfBuffer: Buffer): Promise<{
+  title: string;
+  authors: string[];
+  journal: string | null;
+  published_date: string | null;
+  doi: string | null;
+  abstract: string | null;
+  text: string;
+}> {
+  const base64Data = pdfBuffer.toString("base64");
+
+  const response = await getClient().models.generateContent({
+    model: MODEL,
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            inlineData: {
+              mimeType: "application/pdf",
+              data: base64Data,
+            },
+          },
+          {
+            text: `この論文PDFを読み取り、以下の情報をJSON形式で出力してください。
+
+出力形式（JSONのみ出力、他のテキストは不要）:
+{
+  "title": "論文タイトル（原文のまま）",
+  "authors": ["著者1", "著者2", ...],
+  "journal": "ジャーナル名または会議名（見つからなければnull）",
+  "published_date": "YYYY-MM-DD形式（年のみの場合はYYYY-01-01、見つからなければnull）",
+  "doi": "DOI（見つからなければnull）",
+  "abstract": "アブストラクト全文（見つからなければnull）",
+  "text": "論文の本文テキスト全体（最大8000文字程度）"
+}
+
+注意事項：
+- PDFの画像・テキストすべてを読み取ってください
+- テキストに記載されている情報のみを抽出してください
+- 推測や補完はしないでください
+- 著者名は論文に記載された表記のまま抽出してください
+- DOIは "10." で始まる文字列を探してください
+- textフィールドには論文の本文をできるだけ多く含めてください`,
+          },
+        ],
+      },
+    ],
+    config: {
+      responseMimeType: "application/json",
+      temperature: 0.1,
+      maxOutputTokens: 4096,
+      thinkingConfig: { thinkingBudget: 0 },
+    },
+  });
+
+  const content = response.text?.trim() || "{}";
+  try {
+    const parsed = JSON.parse(content);
+    return {
+      title: parsed.title || "",
+      authors: Array.isArray(parsed.authors) ? parsed.authors : [],
+      journal: parsed.journal || null,
+      published_date: parsed.published_date || null,
+      doi: parsed.doi || null,
+      abstract: parsed.abstract || null,
+      text: typeof parsed.text === "string" ? parsed.text : "",
+    };
+  } catch {
+    return { title: "", authors: [], journal: null, published_date: null, doi: null, abstract: null, text: "" };
+  }
+}
+
 export async function processAllAI(paper: {
   title_original: string;
   authors?: string[];
