@@ -8,9 +8,31 @@ const SCOPES = [
 ];
 
 /**
- * OAuth2 クライアントを生成
+ * リクエストの Host / X-Forwarded-Host ヘッダーからベース URL を解決する。
+ * 優先順位: NEXT_PUBLIC_SITE_URL > リクエストヘッダー > localhost フォールバック
  */
-export function getOAuth2Client() {
+export function resolveBaseUrl(request?: { headers: { get(name: string): string | null } }): string {
+  if (process.env.NEXT_PUBLIC_SITE_URL) {
+    return process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "");
+  }
+
+  if (request) {
+    const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
+    if (host) {
+      const proto = request.headers.get("x-forwarded-proto") || "https";
+      return `${proto}://${host}`;
+    }
+  }
+
+  return "http://localhost:3000";
+}
+
+/**
+ * OAuth2 クライアントを生成。
+ * baseUrl を渡すと redirect URI に反映される（認証開始・コールバック用）。
+ * 省略時は NEXT_PUBLIC_SITE_URL → localhost フォールバック。
+ */
+export function getOAuth2Client(baseUrl?: string) {
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
 
@@ -20,9 +42,8 @@ export function getOAuth2Client() {
     );
   }
 
-  const baseUrl =
-    process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
-  const redirectUri = `${baseUrl}/api/auth/google/callback`;
+  const effectiveBase = baseUrl || resolveBaseUrl();
+  const redirectUri = `${effectiveBase}/api/auth/google/callback`;
 
   return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
 }
@@ -30,8 +51,8 @@ export function getOAuth2Client() {
 /**
  * Google 同意画面の URL を生成
  */
-export function getAuthUrl(returnTo: string): string {
-  const client = getOAuth2Client();
+export function getAuthUrl(returnTo: string, baseUrl?: string): string {
+  const client = getOAuth2Client(baseUrl);
   return client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
@@ -45,8 +66,9 @@ export function getAuthUrl(returnTo: string): string {
  */
 export async function exchangeCode(
   code: string,
+  baseUrl?: string,
 ): Promise<{ refreshToken: string; email: string }> {
-  const client = getOAuth2Client();
+  const client = getOAuth2Client(baseUrl);
   const { tokens } = await client.getToken(code);
 
   if (!tokens.refresh_token) {
