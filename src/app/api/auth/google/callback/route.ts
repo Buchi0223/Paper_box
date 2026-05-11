@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { exchangeCode, saveTokens } from "@/lib/google-oauth";
+import { exchangeCode, saveTokens, resolveBaseUrl } from "@/lib/google-oauth";
 
 /**
  * GET /api/auth/google/callback — Google OAuth コールバック処理
@@ -18,7 +18,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { refreshToken, email } = await exchangeCode(code);
+    const baseUrl = resolveBaseUrl(request);
+    const { refreshToken, email } = await exchangeCode(code, baseUrl);
     await saveTokens(refreshToken, email);
     return NextResponse.redirect(new URL(state, request.url));
   } catch (error) {
