@@ -159,6 +159,7 @@ async function collectForFeed(
           summary_ja: summaryJa,
           explanation_ja: explanationJa,
           published_date: entry.published_date || null,
+          journal: feed.name,
           doi: entry.doi || null,
           url: entry.url,
           source: "rss",
