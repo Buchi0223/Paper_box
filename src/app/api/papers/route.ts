@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { processAllAI } from "@/lib/ai";
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
@@ -16,6 +17,7 @@ export async function POST(request: NextRequest) {
     journal: body.journal || null,
     doi: body.doi || null,
     url: body.url || null,
+    abstract: body.abstract || null,
     summary_ja: body.summary_ja || null,
     explanation_ja: body.explanation_ja || null,
     source: body.source || "manual",
@@ -30,6 +32,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "同じDOIの論文が既に登録されています" }, { status: 409 });
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  const needsAi = !insertData.summary_ja && !insertData.explanation_ja;
+  if (needsAi) {
+    after(async () => {
+      try {
+        console.log("[AI Auto-generate] Starting for paper:", data.id);
+        const result = await processAllAI({
+          title_original: insertData.title_original,
+          authors: insertData.authors,
+          abstract: body.abstract || undefined,
+          text: body.text || undefined,
+        });
+        const updateData: Record<string, string> = {};
+        if (result.summary_ja) updateData.summary_ja = result.summary_ja;
+        if (result.explanation_ja) updateData.explanation_ja = result.explanation_ja;
+        if (result.title_ja && !insertData.title_ja) updateData.title_ja = result.title_ja;
+        if (Object.keys(updateData).length > 0) {
+          await supabase.from("papers").update(updateData).eq("id", data.id);
+          console.log("[AI Auto-generate] Completed for paper:", data.id);
+        }
+      } catch (err) {
+        console.error("[AI Auto-generate] Failed for paper:", data.id, err);
+      }
+    });
   }
 
   return NextResponse.json(data, { status: 201 });

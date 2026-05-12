@@ -11,6 +11,20 @@ type AiResult = {
   total_tokens: number;
 } | null;
 
+type MatchedPaper = {
+  id: string;
+  title_original: string;
+  title_ja: string | null;
+  doi: string | null;
+  source: string;
+  authors: string[];
+  published_date: string | null;
+  journal: string | null;
+  summary_ja: string | null;
+  explanation_ja: string | null;
+  google_drive_url: string | null;
+};
+
 export default function NewPaperPage() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -19,7 +33,12 @@ export default function NewPaperPage() {
   const [isParsing, setIsParsing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [pdfText, setPdfText] = useState<string>("");
+  const [pdfAbstract, setPdfAbstract] = useState<string>("");
   const [driveNotConnected, setDriveNotConnected] = useState(false);
+
+  // マッチング関連
+  const [matchedPaper, setMatchedPaper] = useState<MatchedPaper | null>(null);
+  const [overwriteId, setOverwriteId] = useState<string | null>(null);
 
   // AI処理関連
   const [isAiProcessing, setIsAiProcessing] = useState(false);
@@ -75,8 +94,30 @@ export default function NewPaperPage() {
         if (data.doi && !form.doi) {
           updateField("doi", data.doi);
         }
+        if (data.abstract) {
+          setPdfAbstract(data.abstract);
+        }
         if (data.text) {
           setPdfText(data.text);
+        }
+
+        // 既存論文とのマッチング検索
+        const extractedTitle = data.title || form.title_original;
+        const extractedDoi = data.doi || form.doi;
+        if (extractedTitle || extractedDoi) {
+          try {
+            const matchRes = await fetch("/api/papers/match", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ title: extractedTitle, doi: extractedDoi }),
+            });
+            if (matchRes.ok) {
+              const matchData = await matchRes.json();
+              if (matchData.matches?.length > 0) {
+                setMatchedPaper(matchData.matches[0]);
+              }
+            }
+          } catch { /* マッチング失敗は無視 */ }
         }
       }
     } catch {
@@ -188,8 +229,8 @@ export default function NewPaperPage() {
         doi: form.doi.trim() || null,
         url: form.url.trim() || null,
         memo: form.memo.trim() || null,
+        abstract: pdfAbstract || null,
         google_drive_url: googleDriveUrl,
-        source: "manual",
       };
 
       // AI結果があれば含める
@@ -198,15 +239,32 @@ export default function NewPaperPage() {
         body.explanation_ja = aiEdited.explanation_ja.trim() || null;
       }
 
-      const res = await fetch("/api/papers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      // AI未実行の場合、PDFテキストを渡してバックグラウンド生成に使う
+      if (!aiResult && pdfText) {
+        body.text = pdfText;
+      }
+
+      let res: Response;
+      if (overwriteId) {
+        // 既存論文を上書き
+        res = await fetch(`/api/papers/${overwriteId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      } else {
+        // 新規登録
+        body.source = "manual";
+        res = await fetch("/api/papers", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      }
 
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error || "登録に失敗しました");
+        setError(data.error || (overwriteId ? "上書きに失敗しました" : "登録に失敗しました"));
         return;
       }
 
@@ -286,6 +344,72 @@ export default function NewPaperPage() {
             </div>
           )}
         </div>
+
+        {/* 既存論文マッチング確認 */}
+        {matchedPaper && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-5 dark:border-amber-700 dark:bg-amber-900/20">
+            <h3 className="mb-2 text-sm font-semibold text-amber-800 dark:text-amber-300">
+              同じ論文が既に登録されています
+            </h3>
+            <div className="mb-3 rounded-lg border border-amber-200 bg-white p-3 dark:border-amber-800 dark:bg-gray-800">
+              <p className="text-sm font-medium text-gray-900 dark:text-white">
+                {matchedPaper.title_ja || matchedPaper.title_original}
+              </p>
+              {matchedPaper.title_ja && (
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  {matchedPaper.title_original}
+                </p>
+              )}
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                {matchedPaper.authors?.length > 0 && (
+                  <span>{matchedPaper.authors.slice(0, 3).join(", ")}{matchedPaper.authors.length > 3 ? " et al." : ""}</span>
+                )}
+                {matchedPaper.published_date && (
+                  <span>{matchedPaper.published_date}</span>
+                )}
+                <span className="rounded-full bg-gray-100 px-2 py-0.5 dark:bg-gray-700">
+                  {matchedPaper.source}
+                </span>
+                {matchedPaper.summary_ja && (
+                  <span className="text-green-600 dark:text-green-400">要約あり</span>
+                )}
+                {matchedPaper.google_drive_url && (
+                  <span className="text-blue-600 dark:text-blue-400">PDF登録済み</span>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setOverwriteId(matchedPaper.id);
+                }}
+                className={`rounded-lg px-4 py-2 text-xs font-medium ${
+                  overwriteId === matchedPaper.id
+                    ? "bg-amber-600 text-white"
+                    : "border border-amber-300 bg-white text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:bg-gray-800 dark:text-amber-300 dark:hover:bg-gray-700"
+                }`}
+              >
+                既存を上書き
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOverwriteId(null);
+                  setMatchedPaper(null);
+                }}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+              >
+                新規登録する
+              </button>
+            </div>
+            {overwriteId && (
+              <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+                登録ボタンを押すと、既存の論文データがフォームの内容で上書きされます。
+              </p>
+            )}
+          </div>
+        )}
 
         {/* タイトル（原題）必須 */}
         <div>
@@ -498,13 +622,21 @@ export default function NewPaperPage() {
           <button
             type="submit"
             disabled={isSubmitting || isUploading || isAiProcessing}
-            className="rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            className={`rounded-lg px-6 py-2.5 text-sm font-medium text-white disabled:opacity-50 ${
+              overwriteId
+                ? "bg-amber-600 hover:bg-amber-700"
+                : "bg-blue-600 hover:bg-blue-700"
+            }`}
           >
             {isSubmitting
               ? isUploading
                 ? "アップロード中..."
-                : "登録中..."
-              : "論文を登録"}
+                : overwriteId
+                  ? "上書き中..."
+                  : "登録中..."
+              : overwriteId
+                ? "既存論文を上書き"
+                : "論文を登録"}
           </button>
           <Link
             href="/"
