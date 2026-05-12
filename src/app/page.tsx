@@ -20,6 +20,7 @@ function PaperListContent() {
   const [data, setData] = useState<PapersResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
+  const [pdfOnly, setPdfOnly] = useState(false);
 
   const page = parseInt(searchParams.get("page") || "1");
   const search = searchParams.get("search") || "";
@@ -39,12 +40,13 @@ function PaperListContent() {
     if (keywordId) params.set("keyword_id", keywordId);
     if (dateFrom) params.set("date_from", dateFrom);
     if (dateTo) params.set("date_to", dateTo);
+    if (pdfOnly) params.set("has_pdf", "true");
 
     const res = await fetch(`/api/papers?${params}`);
     const json = await res.json();
     setData(json);
     setIsLoading(false);
-  }, [page, search, sortOrder, keywordId, dateFrom, dateTo]);
+  }, [page, search, sortOrder, keywordId, dateFrom, dateTo, pdfOnly]);
 
   useEffect(() => {
     fetchPapers();
@@ -79,13 +81,23 @@ function PaperListContent() {
     return formatted;
   };
 
-  const hasFilters = !!(search || keywordId || dateFrom || dateTo);
+  const hasFilters = !!(search || keywordId || dateFrom || dateTo || pdfOnly);
 
   return (
     <div>
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">論文一覧</h1>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setPdfOnly(!pdfOnly)}
+            className={`rounded-lg border px-3 py-2 text-sm ${
+              pdfOnly
+                ? "border-purple-300 bg-purple-50 text-purple-700 dark:border-purple-600 dark:bg-purple-900/20 dark:text-purple-400"
+                : "border-gray-300 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-800"
+            }`}
+          >
+            PDF登録済み
+          </button>
           <button
             onClick={() => setSortOrder(sortOrder === "desc" ? "asc" : "desc")}
             className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-800"

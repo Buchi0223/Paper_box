@@ -74,6 +74,7 @@ export async function GET(request: NextRequest) {
   const keywordId = searchParams.get("keyword_id") || "";
   const dateFrom = searchParams.get("date_from") || "";
   const dateTo = searchParams.get("date_to") || "";
+  const hasPdf = searchParams.get("has_pdf") || "";
 
   const offset = (page - 1) * limit;
 
@@ -105,6 +106,10 @@ export async function GET(request: NextRequest) {
 
     if (favorite === "true") {
       query = query.eq("is_favorite", true);
+    }
+
+    if (hasPdf === "true") {
+      query = query.not("google_drive_url", "is", null).neq("google_drive_url", "");
     }
 
     if (search) {
@@ -147,6 +152,10 @@ export async function GET(request: NextRequest) {
 
   if (favorite === "true") {
     query = query.eq("is_favorite", true);
+  }
+
+  if (hasPdf === "true") {
+    query = query.not("google_drive_url", "is", null).neq("google_drive_url", "");
   }
 
   if (search) {
