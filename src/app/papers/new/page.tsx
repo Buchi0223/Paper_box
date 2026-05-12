@@ -19,6 +19,7 @@ export default function NewPaperPage() {
   const [isParsing, setIsParsing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [pdfText, setPdfText] = useState<string>("");
+  const [pdfAbstract, setPdfAbstract] = useState<string>("");
   const [driveNotConnected, setDriveNotConnected] = useState(false);
 
   // AI処理関連
@@ -74,6 +75,9 @@ export default function NewPaperPage() {
         }
         if (data.doi && !form.doi) {
           updateField("doi", data.doi);
+        }
+        if (data.abstract) {
+          setPdfAbstract(data.abstract);
         }
         if (data.text) {
           setPdfText(data.text);
@@ -188,6 +192,7 @@ export default function NewPaperPage() {
         doi: form.doi.trim() || null,
         url: form.url.trim() || null,
         memo: form.memo.trim() || null,
+        abstract: pdfAbstract || null,
         google_drive_url: googleDriveUrl,
         source: "manual",
       };
@@ -196,6 +201,11 @@ export default function NewPaperPage() {
       if (aiResult) {
         body.summary_ja = aiEdited.summary_ja.trim() || null;
         body.explanation_ja = aiEdited.explanation_ja.trim() || null;
+      }
+
+      // AI未実行の場合、PDFテキストを渡してバックグラウンド生成に使う
+      if (!aiResult && pdfText) {
+        body.text = pdfText;
       }
 
       const res = await fetch("/api/papers", {
