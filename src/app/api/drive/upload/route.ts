@@ -19,6 +19,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ url: driveUrl });
   } catch (error) {
+    console.error("[Google Drive] アップロードエラー:", error);
     if (error instanceof DriveUploadError) {
       return NextResponse.json(
         { error: error.message, error_code: error.code },
