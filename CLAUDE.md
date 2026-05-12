@@ -54,7 +54,7 @@ src/
 │   ├── openalex.ts     # OpenAlex API連携
 │   ├── semantic-scholar.ts # Semantic Scholar API連携
 │   ├── rss.ts          # RSSパーサー
-│   ├── google-drive.ts # Google Drive連携（OAuth/サービスアカウント デュアルモード認証）
+│   ├── google-drive.ts # Google Drive連携（OAuth認証）
 │   ├── google-oauth.ts # Google OAuth 2.0ヘルパー（トークン管理・認証URL生成）
 │   ├── notion.ts       # Notion API連携
 │   └── interest-learner.ts # 関心学習
@@ -79,7 +79,7 @@ supabase/
 - `GEMINI_API_KEY` — Gemini AI API
 - `GOOGLE_DRIVE_FOLDER_ID` — Google Drive保存先フォルダID
 - `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` — Google OAuth 2.0クライアント認証情報
-- `GOOGLE_SERVICE_ACCOUNT_KEY` — サービスアカウント認証情報（オプション、OAuth未接続時のフォールバック）
+- `GOOGLE_SERVICE_ACCOUNT_KEY` — サービスアカウント認証情報（オプション、PDF OCR等で使用。Google Drive連携はOAuth専用）
 - `CRON_SECRET` — Vercel Cronの認証
 - `NOTION_TOKEN` — Notion Internal Integration Token（Notion連携）
 
