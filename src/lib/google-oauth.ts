@@ -9,17 +9,25 @@ const SCOPES = [
 
 /**
  * リクエストの Host / X-Forwarded-Host ヘッダーからベース URL を解決する。
- * 優先順位: NEXT_PUBLIC_SITE_URL > リクエストヘッダー > localhost フォールバック
+ * 優先順位: NEXT_PUBLIC_SITE_URL > Vercel自動変数 > リクエストヘッダー > localhost
  */
 export function resolveBaseUrl(request?: { headers: { get(name: string): string | null } }): string {
   if (process.env.NEXT_PUBLIC_SITE_URL) {
     return process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "");
   }
 
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  }
+
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+
   if (request) {
     const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
     if (host) {
-      const proto = request.headers.get("x-forwarded-proto") || "https";
+      const proto = (request.headers.get("x-forwarded-proto") || "https").split(",")[0].trim();
       return `${proto}://${host}`;
     }
   }
