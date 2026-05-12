@@ -1,7 +1,7 @@
 // RSS フィード収集ロジック
 import { supabase } from "@/lib/supabase";
 import { fetchAndParseFeed, type RssEntry } from "@/lib/rss";
-import { translateTitle } from "@/lib/ai";
+import { processAllAI } from "@/lib/ai";
 import {
   scoreRelevance,
   determineReviewStatus,
@@ -112,13 +112,21 @@ async function collectForFeed(
 
     for (const entry of newEntries) {
       try {
-        // AI処理: タイトル翻訳のみ
+        // AI処理: タイトル翻訳・要約・解説
         let titleJa: string | null = null;
+        let summaryJa: string | null = null;
+        let explanationJa: string | null = null;
         try {
-          const titleResult = await translateTitle(entry.title);
-          titleJa = titleResult.title_ja || null;
+          const aiResult = await processAllAI({
+            title_original: entry.title,
+            authors: entry.authors,
+            abstract: entry.abstract || undefined,
+          });
+          titleJa = aiResult.title_ja || null;
+          summaryJa = aiResult.summary_ja || null;
+          explanationJa = aiResult.explanation_ja || null;
         } catch (e) {
-          console.error(`Title translation failed for "${entry.title}":`, e);
+          console.error(`AI processing failed for "${entry.title}":`, e);
         }
 
         // AIスコアリング
@@ -148,6 +156,8 @@ async function collectForFeed(
           title_ja: titleJa,
           authors: entry.authors,
           abstract: entry.abstract || null,
+          summary_ja: summaryJa,
+          explanation_ja: explanationJa,
           published_date: entry.published_date || null,
           doi: entry.doi || null,
           url: entry.url,
