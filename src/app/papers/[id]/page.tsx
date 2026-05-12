@@ -18,12 +18,12 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
   const [isSavingMemo, setIsSavingMemo] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [isGeneratingExplanation, setIsGeneratingExplanation] = useState(false);
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
   const [driveNotConnected, setDriveNotConnected] = useState(false);
   const [isExportingNotion, setIsExportingNotion] = useState(false);
   const [notionConfigured, setNotionConfigured] = useState<boolean | null>(null);
-  const [isAiGenerating, setIsAiGenerating] = useState(false);
   const pdfInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -38,9 +38,6 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
       setPaper(data);
       setMemo(data.memo || "");
       setIsLoading(false);
-      if (!data.summary_ja && !data.explanation_ja) {
-        setIsAiGenerating(true);
-      }
     };
     fetchPaper();
 
@@ -57,28 +54,6 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
     };
     checkNotionConfig();
   }, [id]);
-
-  useEffect(() => {
-    if (!isAiGenerating) return;
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/papers/${id}`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.summary_ja || data.explanation_ja) {
-          setPaper(data);
-          setIsAiGenerating(false);
-        }
-      } catch { /* ignore */ }
-    }, 3000);
-    const timeout = setTimeout(() => {
-      setIsAiGenerating(false);
-    }, 90000);
-    return () => {
-      clearInterval(interval);
-      clearTimeout(timeout);
-    };
-  }, [isAiGenerating, id]);
 
   const saveMemo = async () => {
     setIsSavingMemo(true);
@@ -113,6 +88,31 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
       setShowDeleteConfirm(false);
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleGenerateSummary = async () => {
+    if (!paper) return;
+    setIsGeneratingSummary(true);
+    try {
+      const res = await fetch("/api/ai/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paper_id: paper.id,
+          title_original: paper.title_original,
+          authors: paper.authors,
+          abstract: paper.abstract,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      const data = await res.json();
+      setPaper({ ...paper, summary_ja: data.summary });
+      showToast("要約を生成しました", "success");
+    } catch {
+      showToast("要約の生成に失敗しました", "error");
+    } finally {
+      setIsGeneratingSummary(false);
     }
   };
 
@@ -424,25 +424,37 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
       )}
 
       {/* 要約 */}
-      {paper.summary_ja ? (
-        <section className="mb-6 rounded-lg border border-gray-200 p-5 dark:border-gray-700">
-          <h2 className="mb-3 text-lg font-semibold text-gray-900 dark:text-white">要約</h2>
+      <section className="mb-6 rounded-lg border border-gray-200 p-5 dark:border-gray-700">
+        <h2 className="mb-3 text-lg font-semibold text-gray-900 dark:text-white">要約</h2>
+        {paper.summary_ja ? (
           <p className="whitespace-pre-wrap leading-relaxed text-gray-700 dark:text-gray-300">
             {paper.summary_ja}
           </p>
-        </section>
-      ) : isAiGenerating ? (
-        <section className="mb-6 rounded-lg border border-purple-200 bg-purple-50/50 p-5 dark:border-purple-800 dark:bg-purple-900/10">
-          <h2 className="mb-3 text-lg font-semibold text-gray-900 dark:text-white">要約</h2>
-          <div className="flex items-center gap-3">
-            <svg className="h-5 w-5 animate-spin text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            <p className="text-sm text-purple-600 dark:text-purple-400">AIが要約を生成しています...</p>
+        ) : (
+          <div className="text-center py-4">
+            <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
+              この論文の要約はまだありません
+            </p>
+            <button
+              onClick={handleGenerateSummary}
+              disabled={isGeneratingSummary}
+              className="inline-flex items-center gap-2 rounded-lg border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:border-blue-600 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/30"
+            >
+              {isGeneratingSummary ? (
+                <>
+                  <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  要約を生成中...
+                </>
+              ) : (
+                "要約を生成"
+              )}
+            </button>
           </div>
-        </section>
-      ) : null}
+        )}
+      </section>
 
       {/* 解説 */}
       <section className="mb-6 rounded-lg border border-gray-200 p-5 dark:border-gray-700">
@@ -451,14 +463,6 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
           <p className="whitespace-pre-wrap leading-relaxed text-gray-700 dark:text-gray-300">
             {paper.explanation_ja}
           </p>
-        ) : isAiGenerating ? (
-          <div className="flex items-center gap-3 py-4">
-            <svg className="h-5 w-5 animate-spin text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            <p className="text-sm text-purple-600 dark:text-purple-400">AIが解説を生成しています...</p>
-          </div>
         ) : (
           <div className="text-center py-4">
             <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
