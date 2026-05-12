@@ -3,7 +3,7 @@ import type { OAuth2Client } from "google-auth-library";
 import { supabase } from "@/lib/supabase";
 
 const SCOPES = [
-  "https://www.googleapis.com/auth/drive.file",
+  "https://www.googleapis.com/auth/drive",
   "https://www.googleapis.com/auth/userinfo.email",
 ];
 
