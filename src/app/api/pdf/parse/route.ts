@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractMetadata, extractMetadataFromPdf } from "@/lib/ai";
 
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -12,15 +14,6 @@ export async function POST(request: NextRequest) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    // pdf-parse v1はrequire("pdf-parse")だとテストファイルを読み込むバグがあるため
-    // lib/pdf-parseから直接読み込む
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdfParse = require("pdf-parse/lib/pdf-parse");
-    const pdfData = await pdfParse(buffer);
-
-    const text = (pdfData.text || "") as string;
-    const isTextSufficient = text.length > 50;
-
     let metadata = {
       title: "",
       authors: [] as string[],
@@ -29,19 +22,37 @@ export async function POST(request: NextRequest) {
       doi: null as string | null,
       abstract: null as string | null,
     };
-    let extractedText = text;
+    let extractedText = "";
     let ocrUsed = false;
+    let pages = 0;
+    let pdfInfo: Record<string, string> = {};
 
+    // Step 1: pdf-parseでテキスト抽出を試行
+    let textExtractionSucceeded = false;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const pdfParse = require("pdf-parse/lib/pdf-parse");
+      const pdfData = await pdfParse(buffer);
+      extractedText = (pdfData.text || "") as string;
+      pages = pdfData.numpages || 0;
+      pdfInfo = pdfData.info || {};
+      textExtractionSucceeded = true;
+    } catch (e) {
+      console.warn("[PDF Parse] pdf-parse失敗、Geminiマルチモーダルにフォールバック:", e instanceof Error ? e.message : e);
+    }
+
+    const isTextSufficient = textExtractionSucceeded && extractedText.length > 50;
+
+    // Step 2: メタデータ抽出
     if (isTextSufficient) {
-      // テキストベースPDF: 従来のテキスト抽出 → AIメタデータ抽出
       try {
-        metadata = await extractMetadata(text);
+        metadata = await extractMetadata(extractedText);
       } catch (e) {
-        console.error("[PDF Parse] AI metadata extraction failed:", e);
+        console.error("[PDF Parse] AIメタデータ抽出失敗:", e);
       }
     } else {
-      // スキャンPDF: Geminiマルチモーダルでテキスト+メタデータを一括抽出
-      console.log("[PDF Parse] テキスト不足 (%d文字)、Geminiマルチモーダルにフォールバック", text.length);
+      // テキスト不足またはpdf-parse失敗: Geminiマルチモーダルで一括抽出
+      console.log("[PDF Parse] Geminiマルチモーダルで抽出 (テキスト: %d文字, pdf-parse: %s)", extractedText.length, textExtractionSucceeded ? "成功" : "失敗");
       try {
         const result = await extractMetadataFromPdf(buffer);
         metadata = {
@@ -52,21 +63,28 @@ export async function POST(request: NextRequest) {
           doi: result.doi,
           abstract: result.abstract,
         };
-        extractedText = result.text || text;
+        if (!extractedText || result.text.length > extractedText.length) {
+          extractedText = result.text;
+        }
         ocrUsed = true;
       } catch (e) {
         console.error("[PDF Parse] Geminiマルチモーダル抽出失敗:", e);
+        if (!textExtractionSucceeded) {
+          return NextResponse.json(
+            { error: "PDFの解析に失敗しました。ファイルが破損しているか、保護されている可能性があります。" },
+            { status: 422 },
+          );
+        }
       }
     }
 
-    // AIで取得できなかった場合はPDFメタデータにフォールバック
-    const info = pdfData.info || {};
+    // フォールバック: PDFメタデータから補完
     if (!metadata.title) {
       const lines = extractedText.split("\n").filter((l: string) => l.trim().length > 0);
-      metadata.title = info.Title || lines[0]?.trim() || "";
+      metadata.title = pdfInfo.Title || lines[0]?.trim() || "";
     }
-    if (metadata.authors.length === 0 && info.Author) {
-      metadata.authors = info.Author.split(/[,;]/).map((a: string) => a.trim()).filter(Boolean);
+    if (metadata.authors.length === 0 && pdfInfo.Author) {
+      metadata.authors = pdfInfo.Author.split(/[,;]/).map((a: string) => a.trim()).filter(Boolean);
     }
 
     return NextResponse.json({
@@ -77,7 +95,7 @@ export async function POST(request: NextRequest) {
       doi: metadata.doi,
       abstract: metadata.abstract,
       text: extractedText.slice(0, 12000),
-      pages: pdfData.numpages,
+      pages,
       ocr_used: ocrUsed,
     });
   } catch (error) {

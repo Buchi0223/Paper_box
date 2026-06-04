@@ -5,6 +5,8 @@ import { getReviewSettings } from "@/lib/scoring";
 
 const MODEL = "gemini-2.5-flash";
 
+export const maxDuration = 60;
+
 /**
  * GET /api/scoring/test — スコアリング詳細診断
  * Gemini APIの生レスポンスを直接確認する

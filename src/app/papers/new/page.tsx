@@ -119,9 +119,12 @@ export default function NewPaperPage() {
             }
           } catch { /* マッチング失敗は無視 */ }
         }
+      } else {
+        const errData = await res.json().catch(() => null);
+        setError(errData?.error || "PDF解析に失敗しました。手動で入力してください。");
       }
     } catch {
-      // PDF解析失敗は無視（手動入力で対応可能）
+      setError("PDF解析中にエラーが発生しました。ネットワークを確認してください。");
     } finally {
       setIsParsing(false);
     }

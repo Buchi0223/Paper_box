@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { collectAllPapers } from "@/lib/collector";
 import { collectAllRssFeeds } from "@/lib/rss-collector";
 
+export const maxDuration = 60;
+
 // 手動収集実行API
 export async function POST() {
   try {

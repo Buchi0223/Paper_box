@@ -3,6 +3,8 @@ import { collectAllPapers } from "@/lib/collector";
 import { collectAllRssFeeds } from "@/lib/rss-collector";
 import { getReviewSettings } from "@/lib/scoring";
 
+export const maxDuration = 60;
+
 // Cron Job用の収集API（CRON_SECRETで認証）
 export async function POST(request: NextRequest) {
   // CRON_SECRETによる認証チェック

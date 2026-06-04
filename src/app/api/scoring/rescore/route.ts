@@ -6,6 +6,8 @@ import {
   getReviewSettings,
 } from "@/lib/scoring";
 
+export const maxDuration = 60;
+
 /**
  * POST /api/scoring/rescore — 既存論文を再スコアリング
  * pending 状態の論文のスコアを再計算する

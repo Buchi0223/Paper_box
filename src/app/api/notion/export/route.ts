@@ -3,6 +3,8 @@ import { supabase } from "@/lib/supabase";
 import { exportPaperToNotion } from "@/lib/notion";
 import type { Paper } from "@/types/database";
 
+export const maxDuration = 60;
+
 /**
  * POST /api/notion/export — 論文をNotionにエクスポート
  */
