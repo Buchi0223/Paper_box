@@ -179,26 +179,49 @@ export default function PaperDetailPage({ params }: { params: Promise<{ id: stri
     setIsUploadingPdf(true);
     setDriveNotConnected(false);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const uploadRes = await fetch("/api/drive/upload", {
+      // Step 1: Resumable Upload セッションを開始
+      const initRes = await fetch("/api/drive/upload/init", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: file.name,
+          mimeType: file.type,
+          fileSize: file.size,
+        }),
       });
-      if (!uploadRes.ok) {
-        const errData = await uploadRes.json().catch(() => null);
+      if (!initRes.ok) {
+        const errData = await initRes.json().catch(() => null);
         if (errData?.error_code === "env_not_configured") {
           setDriveNotConnected(true);
           return;
         }
-        throw new Error("Upload failed");
+        throw new Error("Upload init failed");
       }
-      const { url } = await uploadRes.json();
+      const { uploadUri } = await initRes.json();
 
+      // Step 2: クライアントから Google に直接アップロード
+      const uploadRes = await fetch(uploadUri, {
+        method: "PUT",
+        headers: {
+          "Content-Type": file.type,
+          "Content-Length": String(file.size),
+        },
+        body: file,
+      });
+      if (!uploadRes.ok) throw new Error("Upload failed");
+
+      const fileData = await uploadRes.json();
+      const driveUrl = fileData.id
+        ? `https://drive.google.com/file/d/${fileData.id}/view`
+        : null;
+
+      if (!driveUrl) throw new Error("No file ID returned");
+
+      // Step 3: 論文レコードを更新
       const patchRes = await fetch(`/api/papers/${paper.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ google_drive_url: url }),
+        body: JSON.stringify({ google_drive_url: driveUrl }),
       });
       if (!patchRes.ok) throw new Error("Patch failed");
       const updatedPaper = await patchRes.json();

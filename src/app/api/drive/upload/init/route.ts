@@ -6,11 +6,26 @@ export const maxDuration = 30;
 
 export async function POST(request: NextRequest) {
   try {
-    const { fileName, mimeType } = await request.json();
+    const { fileName, mimeType, fileSize } = await request.json();
 
     if (!fileName || !mimeType) {
       return NextResponse.json(
         { error: "fileName と mimeType は必須です" },
+        { status: 400 },
+      );
+    }
+
+    if (mimeType !== "application/pdf") {
+      return NextResponse.json(
+        { error: "PDFファイルのみアップロード可能です" },
+        { status: 400 },
+      );
+    }
+
+    const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+    if (fileSize && fileSize > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: "ファイルサイズが大きすぎます（上限: 100MB）" },
         { status: 400 },
       );
     }

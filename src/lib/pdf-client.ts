@@ -10,9 +10,8 @@ export type PdfClientResult = {
 export async function extractTextFromPdf(file: File): Promise<PdfClientResult> {
   // SSR でのモジュール評価を避けるため動的インポート
   const pdfjsLib = await import("pdfjs-dist");
-  const pdfjsVersion = (await import("pdfjs-dist/package.json")).version;
 
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsVersion}/build/pdf.worker.min.mjs`;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;

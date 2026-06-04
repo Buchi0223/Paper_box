@@ -245,6 +245,7 @@ export default function NewPaperPage() {
         body: JSON.stringify({
           fileName: pdfFile.name,
           mimeType: pdfFile.type,
+          fileSize: pdfFile.size,
         }),
       });
 
