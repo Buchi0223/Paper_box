@@ -22,8 +22,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (typeof fileSize !== "number" || fileSize <= 0) {
+      return NextResponse.json(
+        { error: "fileSize は正の数値で必須です" },
+        { status: 400 },
+      );
+    }
+
     const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
-    if (fileSize && fileSize > MAX_FILE_SIZE) {
+    if (fileSize > MAX_FILE_SIZE) {
       return NextResponse.json(
         { error: "ファイルサイズが大きすぎます（上限: 100MB）" },
         { status: 400 },
@@ -65,6 +72,7 @@ export async function POST(request: NextRequest) {
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json; charset=UTF-8",
           "X-Upload-Content-Type": mimeType,
+          "X-Upload-Content-Length": String(fileSize),
         },
         body: JSON.stringify(metadata),
       },
