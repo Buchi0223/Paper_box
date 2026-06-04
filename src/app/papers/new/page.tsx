@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { extractTextFromPdf } from "@/lib/pdf-client";
 
 type AiResult = {
   title_ja: string;
@@ -64,7 +65,60 @@ export default function NewPaperPage() {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  // PDF選択時にAIでメタデータ抽出
+  // 抽出結果をフォームに反映する共通処理
+  const applyParsedData = async (data: {
+    title?: string;
+    authors?: string[] | string;
+    journal?: string;
+    published_date?: string;
+    doi?: string;
+    abstract?: string;
+    text?: string;
+  }) => {
+    if (data.title && !form.title_original) {
+      updateField("title_original", data.title);
+    }
+    if (data.authors && !form.authors) {
+      const authorsStr = Array.isArray(data.authors) ? data.authors.join(", ") : data.authors;
+      updateField("authors", authorsStr);
+    }
+    if (data.journal && !form.journal) {
+      updateField("journal", data.journal);
+    }
+    if (data.published_date && !form.published_date) {
+      updateField("published_date", data.published_date);
+    }
+    if (data.doi && !form.doi) {
+      updateField("doi", data.doi);
+    }
+    if (data.abstract) {
+      setPdfAbstract(data.abstract);
+    }
+    if (data.text) {
+      setPdfText(data.text);
+    }
+
+    // 既存論文とのマッチング検索
+    const extractedTitle = data.title || form.title_original;
+    const extractedDoi = data.doi || form.doi;
+    if (extractedTitle || extractedDoi) {
+      try {
+        const matchRes = await fetch("/api/papers/match", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: extractedTitle, doi: extractedDoi }),
+        });
+        if (matchRes.ok) {
+          const matchData = await matchRes.json();
+          if (matchData.matches?.length > 0) {
+            setMatchedPaper(matchData.matches[0]);
+          }
+        }
+      } catch { /* マッチング失敗は無視 */ }
+    }
+  };
+
+  // PDF選択時にメタデータ抽出（クライアントサイド優先）
   const handlePdfSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -73,55 +127,54 @@ export default function NewPaperPage() {
     setError(null);
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await fetch("/api/pdf/parse", { method: "POST", body: formData });
-      if (res.ok) {
-        const data = await res.json();
-        // AI抽出メタデータをフォームに自動入力（空の場合のみ）
-        if (data.title && !form.title_original) {
-          updateField("title_original", data.title);
-        }
-        if (data.authors?.length && !form.authors) {
-          updateField("authors", Array.isArray(data.authors) ? data.authors.join(", ") : data.authors);
-        }
-        if (data.journal && !form.journal) {
-          updateField("journal", data.journal);
-        }
-        if (data.published_date && !form.published_date) {
-          updateField("published_date", data.published_date);
-        }
-        if (data.doi && !form.doi) {
-          updateField("doi", data.doi);
-        }
-        if (data.abstract) {
-          setPdfAbstract(data.abstract);
-        }
-        if (data.text) {
-          setPdfText(data.text);
-        }
+      // Step 1: クライアントサイドでテキスト抽出
+      let clientText = "";
+      let clientPages = 0;
+      let clientPdfInfo: { title?: string; author?: string } = {};
+      try {
+        const clientResult = await extractTextFromPdf(file);
+        clientText = clientResult.text;
+        clientPages = clientResult.pages;
+        clientPdfInfo = clientResult.pdfInfo;
+      } catch (e) {
+        console.warn("[PDF Client] クライアントサイド抽出失敗:", e);
+      }
 
-        // 既存論文とのマッチング検索
-        const extractedTitle = data.title || form.title_original;
-        const extractedDoi = data.doi || form.doi;
-        if (extractedTitle || extractedDoi) {
-          try {
-            const matchRes = await fetch("/api/papers/match", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ title: extractedTitle, doi: extractedDoi }),
-            });
-            if (matchRes.ok) {
-              const matchData = await matchRes.json();
-              if (matchData.matches?.length > 0) {
-                setMatchedPaper(matchData.matches[0]);
-              }
-            }
-          } catch { /* マッチング失敗は無視 */ }
+      const isTextSufficient = clientText.length > 50;
+
+      if (isTextSufficient) {
+        // Step 2a: テキストが十分 → テキストのみをサーバーに送信（413回避）
+        const res = await fetch("/api/pdf/extract-metadata", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: clientText.slice(0, 12000),
+            pdfInfo: clientPdfInfo,
+            pages: clientPages,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          await applyParsedData(data);
+        } else {
+          const errData = await res.json().catch(() => null);
+          setError(errData?.error || "メタデータ抽出に失敗しました。手動で入力してください。");
+        }
+      } else if (file.size < 4.5 * 1024 * 1024) {
+        // Step 2b: スキャンPDF（テキスト不足）かつ小さいファイル → 従来の方法でフォールバック
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await fetch("/api/pdf/parse", { method: "POST", body: formData });
+        if (res.ok) {
+          const data = await res.json();
+          await applyParsedData(data);
+        } else {
+          const errData = await res.json().catch(() => null);
+          setError(errData?.error || "PDF解析に失敗しました。手動で入力してください。");
         }
       } else {
-        const errData = await res.json().catch(() => null);
-        setError(errData?.error || "PDF解析に失敗しました。手動で入力してください。");
+        // Step 2c: スキャンPDF かつ 大きいファイル → 手動入力を案内
+        setError("このPDFはテキストが抽出できず、サイズも大きいため自動解析できません。手動で入力してください。");
       }
     } catch {
       setError("PDF解析中にエラーが発生しました。ネットワークを確認してください。");
@@ -179,25 +232,54 @@ export default function NewPaperPage() {
     }
   };
 
-  // Google DriveへPDFアップロード
+  // Google DriveへPDFアップロード（Resumable Upload）
   const uploadPdf = async (): Promise<string | null> => {
     if (!pdfFile) return null;
     setIsUploading(true);
     setDriveNotConnected(false);
     try {
-      const formData = new FormData();
-      formData.append("file", pdfFile);
-      const res = await fetch("/api/drive/upload", { method: "POST", body: formData });
-      if (res.ok) {
-        const data = await res.json();
-        return data.url;
+      // Step 1: サーバー側で Resumable Upload セッションを開始
+      const initRes = await fetch("/api/drive/upload/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: pdfFile.name,
+          mimeType: pdfFile.type,
+          fileSize: pdfFile.size,
+        }),
+      });
+
+      if (!initRes.ok) {
+        const errData = await initRes.json().catch(() => null);
+        if (errData?.error_code === "env_not_configured") {
+          setDriveNotConnected(true);
+        }
+        return null;
       }
-      // env_not_configured の場合は接続案内を表示
-      const errData = await res.json().catch(() => null);
-      if (errData?.error_code === "env_not_configured") {
-        setDriveNotConnected(true);
+
+      const { uploadUri } = await initRes.json();
+
+      // Step 2: クライアントから Google に直接 PUT でアップロード
+      const uploadRes = await fetch(uploadUri, {
+        method: "PUT",
+        headers: {
+          "Content-Type": pdfFile.type,
+          "Content-Length": String(pdfFile.size),
+        },
+        body: pdfFile,
+      });
+
+      if (!uploadRes.ok) {
+        console.error("[Drive Upload] Google upload failed:", uploadRes.status);
+        return null;
       }
-      return null;
+
+      // Step 3: レスポンスから fileId を取得して Drive URL を構築
+      const fileData = await uploadRes.json();
+      const fileId = fileData.id;
+      return fileId
+        ? `https://drive.google.com/file/d/${fileId}/view`
+        : null;
     } catch {
       return null;
     } finally {
