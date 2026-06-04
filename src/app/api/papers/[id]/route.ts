@@ -16,6 +16,13 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   return NextResponse.json(data);
 }
 
+const UPDATABLE_FIELDS = new Set([
+  "title_original", "title_ja", "authors", "published_date", "journal",
+  "doi", "url", "summary_ja", "explanation_ja", "source",
+  "google_drive_url", "is_favorite", "memo", "review_status",
+  "relevance_score", "abstract", "notion_page_id", "notion_page_url",
+]);
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -23,9 +30,20 @@ export async function PATCH(
   const { id } = await params;
   const body = await request.json();
 
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(body)) {
+    if (UPDATABLE_FIELDS.has(key)) {
+      sanitized[key] = value;
+    }
+  }
+
+  if (Object.keys(sanitized).length === 0) {
+    return NextResponse.json({ error: "更新するフィールドがありません" }, { status: 400 });
+  }
+
   const { data, error } = await supabase
     .from("papers")
-    .update(body)
+    .update(sanitized)
     .eq("id", id)
     .select()
     .single();

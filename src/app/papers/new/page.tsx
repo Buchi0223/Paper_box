@@ -315,18 +315,19 @@ export default function NewPaperPage() {
         url: form.url.trim() || null,
         memo: form.memo.trim() || null,
         abstract: pdfAbstract || null,
-        google_drive_url: googleDriveUrl,
       };
+
+      // Google Drive URL: 新規アップロード成功時のみ設定、上書き時は既存を維持
+      if (googleDriveUrl) {
+        body.google_drive_url = googleDriveUrl;
+      } else if (!overwriteId) {
+        body.google_drive_url = null;
+      }
 
       // AI結果があれば含める
       if (aiResult) {
         body.summary_ja = aiEdited.summary_ja.trim() || null;
         body.explanation_ja = aiEdited.explanation_ja.trim() || null;
-      }
-
-      // AI未実行の場合、PDFテキストを渡してバックグラウンド生成に使う
-      if (!aiResult && pdfText) {
-        body.text = pdfText;
       }
 
       let res: Response;
