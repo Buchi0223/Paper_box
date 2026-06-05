@@ -34,14 +34,30 @@ const STOP_WORDS = new Set([
   "using", "based", "via", "new", "novel", "study", "analysis",
 ]);
 
-function extractKeyWords(normalized: string, count: number): string[] {
-  return normalized
-    .split(/\s+/)
-    .map((w) => w.replace(/[^a-z0-9]/g, ""))
-    .filter((w) => w.length > 2 && !STOP_WORDS.has(w))
-    .filter((w, i, arr) => arr.indexOf(w) === i)
-    .sort((a, b) => b.length - a.length)
-    .slice(0, count);
+function extractSearchTerms(normalized: string, count: number): string[] {
+  const words = normalized.split(/\s+/).filter((w) => w.length > 2);
+  const seen = new Set<string>();
+  const terms: string[] = [];
+
+  for (const word of words) {
+    // PostgREST フィルタ構文を壊す文字を除去、ハイフンは保持
+    const sanitized = word.replace(/[,().\\%_'"]/g, "");
+    if (sanitized.length > 2 && !STOP_WORDS.has(sanitized) && !seen.has(sanitized)) {
+      seen.add(sanitized);
+      terms.push(sanitized);
+    }
+    // ハイフン付き単語は分割パーツも候補に追加（graph-based → graph, based は除外）
+    if (sanitized.includes("-")) {
+      for (const part of sanitized.split("-")) {
+        if (part.length > 2 && !STOP_WORDS.has(part) && !seen.has(part)) {
+          seen.add(part);
+          terms.push(part);
+        }
+      }
+    }
+  }
+
+  return terms.sort((a, b) => b.length - a.length).slice(0, count);
 }
 
 function wordSimilarity(a: string, b: string): number {
@@ -87,14 +103,14 @@ export async function POST(request: NextRequest) {
   // タイトルあいまい検索
   if (title) {
     const normalizedSearch = normalizeTitle(title);
-    const keyWords = extractKeyWords(normalizedSearch, 4);
+    const searchTerms = extractSearchTerms(normalizedSearch, 6);
 
-    if (keyWords.length === 0) {
+    if (searchTerms.length === 0) {
       return NextResponse.json({ matches: [] });
     }
 
-    // キーワードのいずれかを含む論文を候補として取得
-    const orFilters = keyWords
+    // 検索語のいずれかを含む論文を候補として取得
+    const orFilters = searchTerms
       .map((w) => `title_original.ilike.%${w}%`)
       .join(",");
 

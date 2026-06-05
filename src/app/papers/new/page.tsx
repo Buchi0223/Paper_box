@@ -100,7 +100,10 @@ export default function NewPaperPage() {
       setPdfText(data.text);
     }
 
-    // 既存論文とのマッチング検索
+    // 既存論文とのマッチング検索（前回の結果をリセットしてから実行）
+    setMatchedPapers([]);
+    setOverwriteId(null);
+
     const extractedTitle = data.title || form.title_original;
     const extractedDoi = data.doi || form.doi;
     if (extractedTitle || extractedDoi) {
