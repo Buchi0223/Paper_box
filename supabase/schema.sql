@@ -13,6 +13,7 @@ CREATE TABLE papers (
   journal TEXT,
   doi TEXT UNIQUE,
   url TEXT,
+  abstract TEXT,
   summary_ja TEXT,
   explanation_ja TEXT,
   source TEXT NOT NULL DEFAULT 'manual',
