@@ -64,16 +64,22 @@ export async function POST(request: NextRequest) {
     }
 
     // Resumable upload セッションを開始
+    const initHeaders: Record<string, string> = {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json; charset=UTF-8",
+      "X-Upload-Content-Type": mimeType,
+      "X-Upload-Content-Length": String(fileSize),
+    };
+    const origin = request.headers.get("Origin");
+    if (origin) {
+      initHeaders["Origin"] = origin;
+    }
+
     const initRes = await fetch(
       "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true",
       {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json; charset=UTF-8",
-          "X-Upload-Content-Type": mimeType,
-          "X-Upload-Content-Length": String(fileSize),
-        },
+        headers: initHeaders,
         body: JSON.stringify(metadata),
       },
     );
