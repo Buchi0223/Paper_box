@@ -24,6 +24,8 @@ type MatchedPaper = {
   summary_ja: string | null;
   explanation_ja: string | null;
   google_drive_url: string | null;
+  similarity: number;
+  matched_by: "doi" | "title";
 };
 
 export default function NewPaperPage() {
@@ -38,7 +40,7 @@ export default function NewPaperPage() {
   const [driveNotConnected, setDriveNotConnected] = useState(false);
 
   // マッチング関連
-  const [matchedPaper, setMatchedPaper] = useState<MatchedPaper | null>(null);
+  const [matchedPapers, setMatchedPapers] = useState<MatchedPaper[]>([]);
   const [overwriteId, setOverwriteId] = useState<string | null>(null);
 
   // AI処理関連
@@ -98,7 +100,10 @@ export default function NewPaperPage() {
       setPdfText(data.text);
     }
 
-    // 既存論文とのマッチング検索
+    // 既存論文とのマッチング検索（前回の結果をリセットしてから実行）
+    setMatchedPapers([]);
+    setOverwriteId(null);
+
     const extractedTitle = data.title || form.title_original;
     const extractedDoi = data.doi || form.doi;
     if (extractedTitle || extractedDoi) {
@@ -111,7 +116,7 @@ export default function NewPaperPage() {
         if (matchRes.ok) {
           const matchData = await matchRes.json();
           if (matchData.matches?.length > 0) {
-            setMatchedPaper(matchData.matches[0]);
+            setMatchedPapers(matchData.matches);
           }
         }
       } catch { /* マッチング失敗は無視 */ }
@@ -125,6 +130,8 @@ export default function NewPaperPage() {
     setPdfFile(file);
     setIsParsing(true);
     setError(null);
+    setMatchedPapers([]);
+    setOverwriteId(null);
 
     try {
       // Step 1: クライアントサイドでテキスト抽出
@@ -432,66 +439,105 @@ export default function NewPaperPage() {
         </div>
 
         {/* 既存論文マッチング確認 */}
-        {matchedPaper && (
+        {matchedPapers.length > 0 && (
           <div className="rounded-lg border border-amber-300 bg-amber-50 p-5 dark:border-amber-700 dark:bg-amber-900/20">
-            <h3 className="mb-2 text-sm font-semibold text-amber-800 dark:text-amber-300">
-              同じ論文が既に登録されています
+            <h3 className="mb-3 text-sm font-semibold text-amber-800 dark:text-amber-300">
+              類似する論文が見つかりました（{matchedPapers.length}件）
             </h3>
-            <div className="mb-3 rounded-lg border border-amber-200 bg-white p-3 dark:border-amber-800 dark:bg-gray-800">
-              <p className="text-sm font-medium text-gray-900 dark:text-white">
-                {matchedPaper.title_ja || matchedPaper.title_original}
-              </p>
-              {matchedPaper.title_ja && (
-                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                  {matchedPaper.title_original}
-                </p>
-              )}
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                {matchedPaper.authors?.length > 0 && (
-                  <span>{matchedPaper.authors.slice(0, 3).join(", ")}{matchedPaper.authors.length > 3 ? " et al." : ""}</span>
-                )}
-                {matchedPaper.published_date && (
-                  <span>{matchedPaper.published_date}</span>
-                )}
-                <span className="rounded-full bg-gray-100 px-2 py-0.5 dark:bg-gray-700">
-                  {matchedPaper.source}
-                </span>
-                {matchedPaper.summary_ja && (
-                  <span className="text-green-600 dark:text-green-400">要約あり</span>
-                )}
-                {matchedPaper.google_drive_url && (
-                  <span className="text-blue-600 dark:text-blue-400">PDF登録済み</span>
-                )}
-              </div>
+            <div className="mb-3 space-y-2">
+              {matchedPapers.map((mp) => (
+                <div
+                  key={mp.id}
+                  className={`rounded-lg border p-3 transition-colors ${
+                    overwriteId === mp.id
+                      ? "border-amber-500 bg-amber-100 dark:border-amber-500 dark:bg-amber-900/40"
+                      : "border-amber-200 bg-white hover:border-amber-300 dark:border-amber-800 dark:bg-gray-800 dark:hover:border-amber-600"
+                  }`}
+                >
+                  <div className="mb-1.5 flex items-center gap-2">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        mp.matched_by === "doi"
+                          ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                          : mp.similarity >= 0.9
+                            ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                            : mp.similarity >= 0.7
+                              ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                              : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
+                      }`}
+                    >
+                      {mp.matched_by === "doi"
+                        ? "DOI一致"
+                        : mp.similarity >= 0.9
+                          ? `高一致 ${Math.round(mp.similarity * 100)}%`
+                          : mp.similarity >= 0.7
+                            ? `中一致 ${Math.round(mp.similarity * 100)}%`
+                            : `低一致 ${Math.round(mp.similarity * 100)}%`}
+                    </span>
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs dark:bg-gray-700 dark:text-gray-300">
+                      {mp.source}
+                    </span>
+                    {mp.summary_ja && (
+                      <span className="text-xs text-green-600 dark:text-green-400">要約あり</span>
+                    )}
+                    {mp.google_drive_url && (
+                      <span className="text-xs text-blue-600 dark:text-blue-400">PDF登録済み</span>
+                    )}
+                  </div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">
+                    {mp.title_ja || mp.title_original}
+                  </p>
+                  {mp.title_ja && (
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                      {mp.title_original}
+                    </p>
+                  )}
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                    {mp.authors?.length > 0 && (
+                      <span>
+                        {mp.authors.slice(0, 3).join(", ")}
+                        {mp.authors.length > 3 ? " et al." : ""}
+                      </span>
+                    )}
+                    {mp.published_date && <span>{mp.published_date}</span>}
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setOverwriteId(overwriteId === mp.id ? null : mp.id)}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
+                        overwriteId === mp.id
+                          ? "bg-amber-600 text-white"
+                          : "border border-amber-300 bg-white text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:bg-gray-800 dark:text-amber-300 dark:hover:bg-gray-700"
+                      }`}
+                    >
+                      {overwriteId === mp.id ? "上書き選択中" : "この論文を上書き"}
+                    </button>
+                    <a
+                      href={`/papers/${mp.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700"
+                    >
+                      詳細を確認
+                    </a>
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setOverwriteId(matchedPaper.id);
-                }}
-                className={`rounded-lg px-4 py-2 text-xs font-medium ${
-                  overwriteId === matchedPaper.id
-                    ? "bg-amber-600 text-white"
-                    : "border border-amber-300 bg-white text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:bg-gray-800 dark:text-amber-300 dark:hover:bg-gray-700"
-                }`}
-              >
-                既存を上書き
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setOverwriteId(null);
-                  setMatchedPaper(null);
-                }}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-              >
-                新規登録する
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setOverwriteId(null);
+                setMatchedPapers([]);
+              }}
+              className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+            >
+              すべて無視して新規登録する
+            </button>
             {overwriteId && (
               <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
-                登録ボタンを押すと、既存の論文データがフォームの内容で上書きされます。
+                登録ボタンを押すと、選択した論文のデータがフォームの内容で上書きされます。
               </p>
             )}
           </div>

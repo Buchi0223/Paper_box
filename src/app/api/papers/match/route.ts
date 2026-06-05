@@ -1,6 +1,91 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 
+const SELECT_FIELDS =
+  "id, title_original, title_ja, doi, source, authors, published_date, journal, summary_ja, explanation_ja, google_drive_url";
+
+function normalizeTitle(title: string): string {
+  return (
+    title
+      // 合字の展開
+      .replace(/ﬁ/g, "fi")
+      .replace(/ﬂ/g, "fl")
+      .replace(/ﬀ/g, "ff")
+      .replace(/ﬃ/g, "ffi")
+      .replace(/ﬄ/g, "ffl")
+      // ハイフン・ダッシュ系を統一
+      .replace(/[‐-―−﹘﹣－]/g, "-")
+      // スマートクォートを統一
+      .replace(/[‘’‚‛]/g, "'")
+      .replace(/[“”„‟]/g, '"')
+      // 空白の統合
+      .replace(/\s+/g, " ")
+      // 末尾の記号除去
+      .replace(/[.,;:!?]+$/, "")
+      .trim()
+      .toLowerCase()
+  );
+}
+
+const STOP_WORDS = new Set([
+  "a", "an", "the", "of", "in", "on", "at", "to", "for", "and", "or",
+  "is", "are", "was", "were", "by", "with", "from", "as", "its",
+  "this", "that", "be", "has", "have", "not", "but", "can", "do",
+  "using", "based", "via", "new", "novel", "study", "analysis",
+]);
+
+function extractSearchTerms(normalized: string, count: number): string[] {
+  const words = normalized.split(/\s+/).filter((w) => w.length > 2);
+  const seen = new Set<string>();
+  const terms: string[] = [];
+
+  for (const word of words) {
+    // PostgREST フィルタ構文を壊す文字を除去、ハイフンは保持
+    const sanitized = word.replace(/[,().\\%_'"]/g, "");
+    if (sanitized.length > 2 && !STOP_WORDS.has(sanitized) && !seen.has(sanitized)) {
+      seen.add(sanitized);
+      terms.push(sanitized);
+    }
+    // ハイフン付き単語は分割パーツも候補に追加（graph-based → graph, based は除外）
+    if (sanitized.includes("-")) {
+      for (const part of sanitized.split("-")) {
+        if (part.length > 2 && !STOP_WORDS.has(part) && !seen.has(part)) {
+          seen.add(part);
+          terms.push(part);
+        }
+      }
+    }
+  }
+
+  return terms.sort((a, b) => b.length - a.length).slice(0, count);
+}
+
+function tokenize(text: string): Set<string> {
+  const tokens = new Set<string>();
+  for (const word of text.split(/\s+/)) {
+    if (word.length <= 1) continue;
+    tokens.add(word);
+    if (word.includes("-")) {
+      for (const part of word.split("-")) {
+        if (part.length > 1) tokens.add(part);
+      }
+    }
+  }
+  return tokens;
+}
+
+function wordSimilarity(a: string, b: string): number {
+  const wordsA = tokenize(a);
+  const wordsB = tokenize(b);
+  if (wordsA.size === 0 && wordsB.size === 0) return 1;
+  if (wordsA.size === 0 || wordsB.size === 0) return 0;
+  const intersection = [...wordsA].filter((w) => wordsB.has(w)).length;
+  const union = new Set([...wordsA, ...wordsB]).size;
+  return intersection / union;
+}
+
+const SIMILARITY_THRESHOLD = 0.4;
+
 export async function POST(request: NextRequest) {
   const body = await request.json();
   const { title, doi } = body as { title?: string; doi?: string };
@@ -11,27 +96,63 @@ export async function POST(request: NextRequest) {
 
   // DOI完全一致を優先
   if (doi) {
-    const { data } = await supabase
-      .from("papers")
-      .select("id, title_original, title_ja, doi, source, authors, published_date, journal, summary_ja, explanation_ja, google_drive_url")
-      .eq("doi", doi)
-      .limit(5);
-    if (data && data.length > 0) {
-      return NextResponse.json({ matches: data, matched_by: "doi" });
+    const normalizedDoi = doi.trim();
+    if (normalizedDoi) {
+      const { data } = await supabase
+        .from("papers")
+        .select(SELECT_FIELDS)
+        .eq("doi", normalizedDoi)
+        .limit(5);
+      if (data && data.length > 0) {
+        const matches = data.map((p) => ({
+          ...p,
+          similarity: 1.0,
+          matched_by: "doi" as const,
+        }));
+        return NextResponse.json({ matches });
+      }
     }
   }
 
-  // タイトル一致（大文字小文字無視）
+  // タイトルあいまい検索
   if (title) {
-    const normalized = title.trim();
+    const normalizedSearch = normalizeTitle(title);
+    const searchTerms = extractSearchTerms(normalizedSearch, 6);
+
+    if (searchTerms.length === 0) {
+      return NextResponse.json({ matches: [] });
+    }
+
+    // 検索語のいずれかを含む論文を候補として取得
+    const orFilters = searchTerms
+      .map((w) => `title_original.ilike.%${w}%`)
+      .join(",");
+
     const { data } = await supabase
       .from("papers")
-      .select("id, title_original, title_ja, doi, source, authors, published_date, journal, summary_ja, explanation_ja, google_drive_url")
-      .ilike("title_original", normalized)
-      .limit(5);
-    if (data && data.length > 0) {
-      return NextResponse.json({ matches: data, matched_by: "title" });
+      .select(SELECT_FIELDS)
+      .or(orFilters)
+      .limit(50);
+
+    if (!data || data.length === 0) {
+      return NextResponse.json({ matches: [] });
     }
+
+    // 類似度スコアリング
+    const scored = data
+      .map((p) => {
+        const normalizedDb = normalizeTitle(p.title_original);
+        const similarity =
+          normalizedSearch === normalizedDb
+            ? 1.0
+            : wordSimilarity(normalizedSearch, normalizedDb);
+        return { ...p, similarity, matched_by: "title" as const };
+      })
+      .filter((p) => p.similarity >= SIMILARITY_THRESHOLD)
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, 5);
+
+    return NextResponse.json({ matches: scored });
   }
 
   return NextResponse.json({ matches: [] });
