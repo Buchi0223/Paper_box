@@ -7,20 +7,15 @@ const SELECT_FIELDS =
 function normalizeTitle(title: string): string {
   return (
     title
-      // 合字の展開
       .replace(/ﬁ/g, "fi")
       .replace(/ﬂ/g, "fl")
       .replace(/ﬀ/g, "ff")
       .replace(/ﬃ/g, "ffi")
       .replace(/ﬄ/g, "ffl")
-      // ハイフン・ダッシュ系を統一
       .replace(/[‐-―−﹘﹣－]/g, "-")
-      // スマートクォートを統一
       .replace(/[‘’‚‛]/g, "'")
       .replace(/[“”„‟]/g, '"')
-      // 空白の統合
       .replace(/\s+/g, " ")
-      // 末尾の記号除去
       .replace(/[.,;:!?]+$/, "")
       .trim()
       .toLowerCase()
@@ -40,13 +35,11 @@ function extractSearchTerms(normalized: string, count: number): string[] {
   const terms: string[] = [];
 
   for (const word of words) {
-    // PostgREST フィルタ構文を壊す文字を除去、ハイフンは保持
     const sanitized = word.replace(/[,().\\%_'"]/g, "");
     if (sanitized.length > 2 && !STOP_WORDS.has(sanitized) && !seen.has(sanitized)) {
       seen.add(sanitized);
       terms.push(sanitized);
     }
-    // ハイフン付き単語は分割パーツも候補に追加（graph-based → graph, based は除外）
     if (sanitized.includes("-")) {
       for (const part of sanitized.split("-")) {
         if (part.length > 2 && !STOP_WORDS.has(part) && !seen.has(part)) {
@@ -87,73 +80,117 @@ function wordSimilarity(a: string, b: string): number {
 const SIMILARITY_THRESHOLD = 0.4;
 
 export async function POST(request: NextRequest) {
-  const body = await request.json();
-  const { title, doi } = body as { title?: string; doi?: string };
+  try {
+    const body = await request.json();
+    const { title, doi } = body as { title?: string; doi?: string };
 
-  if (!title && !doi) {
-    return NextResponse.json({ matches: [] });
-  }
+    console.log("[Match API] input:", { title: title?.slice(0, 80), doi });
 
-  // DOI完全一致を優先
-  if (doi) {
-    const normalizedDoi = doi.trim();
-    if (normalizedDoi) {
-      const { data } = await supabase
-        .from("papers")
-        .select(SELECT_FIELDS)
-        .eq("doi", normalizedDoi)
-        .limit(5);
-      if (data && data.length > 0) {
-        const matches = data.map((p) => ({
-          ...p,
-          similarity: 1.0,
-          matched_by: "doi" as const,
-        }));
-        return NextResponse.json({ matches });
+    if (!title && !doi) {
+      return NextResponse.json({ matches: [] });
+    }
+
+    // DOI完全一致を優先
+    if (doi) {
+      const normalizedDoi = doi.trim();
+      if (normalizedDoi) {
+        const { data, error } = await supabase
+          .from("papers")
+          .select(SELECT_FIELDS)
+          .eq("doi", normalizedDoi)
+          .limit(5);
+        if (error) {
+          console.error("[Match API] DOI search error:", error);
+        }
+        if (data && data.length > 0) {
+          console.log("[Match API] DOI match found:", data.length);
+          const matches = data.map((p) => ({
+            ...p,
+            similarity: 1.0,
+            matched_by: "doi" as const,
+          }));
+          return NextResponse.json({ matches });
+        }
       }
     }
-  }
 
-  // タイトルあいまい検索
-  if (title) {
-    const normalizedSearch = normalizeTitle(title);
-    const searchTerms = extractSearchTerms(normalizedSearch, 6);
+    // タイトルあいまい検索
+    if (title) {
+      const normalizedSearch = normalizeTitle(title);
+      const searchTerms = extractSearchTerms(normalizedSearch, 5);
 
-    if (searchTerms.length === 0) {
-      return NextResponse.json({ matches: [] });
+      console.log("[Match API] normalized:", normalizedSearch.slice(0, 80));
+      console.log("[Match API] searchTerms:", searchTerms);
+
+      if (searchTerms.length === 0) {
+        console.log("[Match API] no search terms extracted");
+        return NextResponse.json({ matches: [] });
+      }
+
+      // 各検索語で個別にilike検索（.or()のエンコード問題を回避）
+      const queries = searchTerms.map((term) =>
+        supabase
+          .from("papers")
+          .select(SELECT_FIELDS)
+          .ilike("title_original", `%${term}%`)
+          .limit(20),
+      );
+
+      const results = await Promise.all(queries);
+
+      type PaperRow = { id: string; title_original: string; [key: string]: unknown };
+      const candidateMap = new Map<string, PaperRow>();
+
+      for (let i = 0; i < results.length; i++) {
+        const { data, error } = results[i];
+        if (error) {
+          console.error(`[Match API] ilike search error for "${searchTerms[i]}":`, error);
+          continue;
+        }
+        if (data) {
+          for (const p of data as PaperRow[]) {
+            if (!candidateMap.has(p.id)) {
+              candidateMap.set(p.id, p);
+            }
+          }
+        }
+      }
+
+      const candidates = [...candidateMap.values()];
+      console.log("[Match API] candidates found:", candidates.length);
+
+      if (candidates.length === 0) {
+        return NextResponse.json({ matches: [] });
+      }
+
+      // 類似度スコアリング
+      const scored = candidates
+        .map((p) => {
+          const normalizedDb = normalizeTitle(p.title_original);
+          const similarity =
+            normalizedSearch === normalizedDb
+              ? 1.0
+              : wordSimilarity(normalizedSearch, normalizedDb);
+          return { ...p, similarity, matched_by: "title" as const };
+        })
+        .filter((p) => p.similarity >= SIMILARITY_THRESHOLD)
+        .sort((a, b) => b.similarity - a.similarity)
+        .slice(0, 5);
+
+      console.log(
+        "[Match API] scored matches:",
+        scored.map((s) => ({
+          title: s.title_original.slice(0, 50),
+          similarity: s.similarity,
+        })),
+      );
+
+      return NextResponse.json({ matches: scored });
     }
 
-    // 検索語のいずれかを含む論文を候補として取得
-    const orFilters = searchTerms
-      .map((w) => `title_original.ilike.%${w}%`)
-      .join(",");
-
-    const { data } = await supabase
-      .from("papers")
-      .select(SELECT_FIELDS)
-      .or(orFilters)
-      .limit(50);
-
-    if (!data || data.length === 0) {
-      return NextResponse.json({ matches: [] });
-    }
-
-    // 類似度スコアリング
-    const scored = data
-      .map((p) => {
-        const normalizedDb = normalizeTitle(p.title_original);
-        const similarity =
-          normalizedSearch === normalizedDb
-            ? 1.0
-            : wordSimilarity(normalizedSearch, normalizedDb);
-        return { ...p, similarity, matched_by: "title" as const };
-      })
-      .filter((p) => p.similarity >= SIMILARITY_THRESHOLD)
-      .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, 5);
-
-    return NextResponse.json({ matches: scored });
+    return NextResponse.json({ matches: [] });
+  } catch (error) {
+    console.error("[Match API] Unexpected error:", error);
+    return NextResponse.json({ matches: [] });
   }
-
-  return NextResponse.json({ matches: [] });
 }

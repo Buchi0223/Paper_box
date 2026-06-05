@@ -106,6 +106,7 @@ export default function NewPaperPage() {
 
     const extractedTitle = data.title || form.title_original;
     const extractedDoi = data.doi || form.doi;
+    console.log("[Match] searching:", { title: extractedTitle?.slice(0, 80), doi: extractedDoi });
     if (extractedTitle || extractedDoi) {
       try {
         const matchRes = await fetch("/api/papers/match", {
@@ -115,11 +116,18 @@ export default function NewPaperPage() {
         });
         if (matchRes.ok) {
           const matchData = await matchRes.json();
+          console.log("[Match] results:", matchData.matches?.length ?? 0);
           if (matchData.matches?.length > 0) {
             setMatchedPapers(matchData.matches);
           }
+        } else {
+          console.error("[Match] API error:", matchRes.status);
         }
-      } catch { /* マッチング失敗は無視 */ }
+      } catch (err) {
+        console.error("[Match] fetch error:", err);
+      }
+    } else {
+      console.log("[Match] skipped: no title or doi");
     }
   };
 
