@@ -60,9 +60,23 @@ function extractSearchTerms(normalized: string, count: number): string[] {
   return terms.sort((a, b) => b.length - a.length).slice(0, count);
 }
 
+function tokenize(text: string): Set<string> {
+  const tokens = new Set<string>();
+  for (const word of text.split(/\s+/)) {
+    if (word.length <= 1) continue;
+    tokens.add(word);
+    if (word.includes("-")) {
+      for (const part of word.split("-")) {
+        if (part.length > 1) tokens.add(part);
+      }
+    }
+  }
+  return tokens;
+}
+
 function wordSimilarity(a: string, b: string): number {
-  const wordsA = new Set(a.split(/\s+/).filter((w) => w.length > 1));
-  const wordsB = new Set(b.split(/\s+/).filter((w) => w.length > 1));
+  const wordsA = tokenize(a);
+  const wordsB = tokenize(b);
   if (wordsA.size === 0 && wordsB.size === 0) return 1;
   if (wordsA.size === 0 || wordsB.size === 0) return 0;
   const intersection = [...wordsA].filter((w) => wordsB.has(w)).length;

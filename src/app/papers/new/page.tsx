@@ -130,6 +130,8 @@ export default function NewPaperPage() {
     setPdfFile(file);
     setIsParsing(true);
     setError(null);
+    setMatchedPapers([]);
+    setOverwriteId(null);
 
     try {
       // Step 1: クライアントサイドでテキスト抽出
